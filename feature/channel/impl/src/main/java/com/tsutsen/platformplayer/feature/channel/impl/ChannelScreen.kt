@@ -3,7 +3,6 @@ package com.tsutsen.platformplayer.feature.channel.impl
 import com.tsutsen.platformplayer.core.designsystem.theme.BluejayTokens
 
 import com.tsutsen.platformplayer.core.designsystem.theme.Tokens
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +38,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -852,20 +852,31 @@ private fun ChannelIconRail(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         tabs.forEachIndexed { index, tab ->
-            IconButton(
-                onClick = { onSelect(index) },
-                modifier = Modifier.padding(vertical = 8.dp),
-            ) {
-                Icon(
-                    imageVector = tab.icon,
-                    contentDescription = tab.label,
-                    tint =
-                        if (index == selectedTab) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                )
+            // Circle bubbles: the selected section's icon sits in a filled
+            // tonal bubble (FilledTonalIconButton's default shape is round);
+            // unselected sections stay bare icon buttons with the circular
+            // ripple as their press feedback.
+            if (index == selectedTab) {
+                FilledTonalIconButton(
+                    onClick = { onSelect(index) },
+                    modifier = Modifier.padding(vertical = 8.dp),
+                ) {
+                    Icon(
+                        imageVector = tab.icon,
+                        contentDescription = tab.label,
+                    )
+                }
+            } else {
+                IconButton(
+                    onClick = { onSelect(index) },
+                    modifier = Modifier.padding(vertical = 8.dp),
+                ) {
+                    Icon(
+                        imageVector = tab.icon,
+                        contentDescription = tab.label,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
