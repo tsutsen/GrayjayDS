@@ -16,8 +16,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ContainedLoadingIndicator
-import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -334,23 +332,21 @@ fun PlayerContent(
             handler = gestureHandler,
             isScrubbing = isScrubbing,
             onTap = onTap,
+            // Pinch-to-zoom (default, non-configurable): the gesture system
+            // recognises the second pointer inside its own loop and reports
+            // an incremental scale per move (1.0 = no change). The video
+            // surface carries the resulting scale (graphicsLayer above).
+            // This must NOT be a separate detectTransformGestures layer on
+            // top: in foundation 1.12.0-beta01 that detector tracks the
+            // single-pointer centroid as pan and consumes every move past
+            // touch slop, starving all single-finger gestures on the video.
+            onPinchScale = { scale ->
+                zoomScale = (zoomScale * scale).coerceIn(1f, 3f)
+            },
             // Floating mode
             onOffsetChanged = onMiniOffsetChanged,
             onExpand = onExpand,
             )
-
-        // ==================== 2b. Pinch-to-zoom (default, non-configurable) ====================
-        // Sits above the gesture system and only reacts to 2+ pointers, so
-        // single-pointer taps/drags/holds still reach the gesture system below.
-        // The video surface carries the matching scale (graphicsLayer above).
-        Box(
-            modifier =
-                videoModifier.pointerInput(Unit) {
-                    detectTransformGestures { _, _, gestureScale, _ ->
-                        zoomScale = (zoomScale * gestureScale).coerceIn(1f, 3f)
-                    }
-                },
-        )
 
         // ==================== 3. Details panel (LazyColumn) ====================
         // Rendered on top of the gesture layer so the LazyColumn can receive scroll

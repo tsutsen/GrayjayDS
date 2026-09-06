@@ -16,6 +16,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -24,6 +26,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -80,6 +83,10 @@ fun PlayerGestureSystem(
     handler: GestureActionHandler,
     isScrubbing: Boolean,
     onTap: () -> Unit,
+    // Pinch-to-zoom (non-floating mode only): called with an incremental
+    // scale factor (1.0 = no change) on every pinch move while two
+    // pointers are down. The caller owns the accumulated scale.
+    onPinchScale: (Float) -> Unit = {},
     // Floating-mode drag params (only used when overlayMode == FLOATING)
     onOffsetChanged: (Float, Float) -> Unit = { _, _ -> },
     onExpand: () -> Unit = {},
@@ -97,6 +104,7 @@ fun PlayerGestureSystem(
     val currentOverlayMode by rememberUpdatedState(overlayMode)
     val currentIsScrubbing by rememberUpdatedState(isScrubbing)
     val currentOnTap by rememberUpdatedState(onTap)
+    val currentOnPinchScale by rememberUpdatedState(onPinchScale)
     val currentOnExpand by rememberUpdatedState(onExpand)
     val currentOnOffsetChanged by rememberUpdatedState(onOffsetChanged)
     val currentDoubleTapSlopPx by rememberUpdatedState(with(density) { DOUBLE_TAP_SLOP_DP.dp.toPx() })
@@ -265,8 +273,76 @@ fun PlayerGestureSystem(
                                 }
                                 try {
                                     var slide: PlayerGestureRecognizer.MoveResult.SlideStart? = null
+                                    // Pinch state: set when a second pointer lands
+                                    // while the first is down. The gesture becomes
+                                    // a pinch-to-zoom from that moment on.
+                                    var pinchSecondId: PointerId? = null
+                                    var pinchPrevDist = 0f
                                     while (true) {
                                         val event = awaitPointerEvent()
+
+                                        // ---- 2a. Pinch: a second pointer has landed ----
+                                        //
+                                        // The pinch lives in this loop instead of a
+                                        // separate detectTransformGestures layer
+                                        // above it: that detector (foundation
+                                        // 1.12.0-beta01) tracks the centroid of
+                                        // EVERY pressed pointer as pan and, once a
+                                        // single finger drifts past touch slop,
+                                        // consumes all later events — starving
+                                        // every single-finger gesture below it.
+                                        // Here a second pointer is only ever
+                                        // interesting while the first is down, and
+                                        // it consumes nothing before that moment.
+                                        if (pinchSecondId == null) {
+                                            val second =
+                                                event.changes.firstOrNull { it.id != pointerId && it.pressed }
+                                            if (second != null) {
+                                                pinchSecondId = second.id
+                                                // The single-finger decision is
+                                                // over: kill the hold watchdog and
+                                                // flush the hold/slide END frame
+                                                // (if a hold already fired) so
+                                                // nothing sticks.
+                                                holdWatchdog.cancel()
+                                                recognizer.cancel(System.currentTimeMillis())
+                                                    ?.let {
+                                                        currentHandler.handleGestureFrame(it)
+                                                    }
+                                                val first = event.changes.firstOrNull { it.id == pointerId }
+                                                if (first != null && first.pressed) {
+                                                    pinchPrevDist = pointerDistance(first, second)
+                                                }
+                                            }
+                                        }
+                                        if (pinchSecondId != null) {
+                                            // The pinch owns every pointer of this
+                                            // gesture from here on — consume all
+                                            // changes (including the first
+                                            // finger's up, so it can never be
+                                            // mistaken for a tap).
+                                            event.changes.forEach { it.consume() }
+                                            val first = event.changes.firstOrNull { it.id == pointerId }
+                                            val second = event.changes.firstOrNull { it.id == pinchSecondId }
+                                            if (first != null && second != null &&
+                                                first.pressed && second.pressed
+                                            ) {
+                                                val dist = pointerDistance(first, second)
+                                                if (dist > 0f && pinchPrevDist > 0f) {
+                                                    currentOnPinchScale(dist / pinchPrevDist)
+                                                }
+                                                pinchPrevDist = dist
+                                            }
+                                            // Both fingers up: pinch done. End the
+                                            // gesture with no tap/hold/slide —
+                                            // slide is null, so the execution
+                                            // phase below is skipped, and the
+                                            // finally flush is a no-op (the END
+                                            // frame was already sent on entry).
+                                            if (first?.pressed != true && second?.pressed != true) break
+                                            continue
+                                        }
+
                                         val change = event.changes.lastOrNull { it.id == pointerId } ?: continue
                                         if (!change.pressed) {
                                             when (val up = recognizer.onUp(System.currentTimeMillis())) {
@@ -371,4 +447,15 @@ fun PlayerGestureSystem(
             )
         }
     }
+}
+
+/**
+ * Euclidean distance between two pressed pointers in px — the pinch's size
+ * measurement. The per-move scale handed to [PlayerGestureSystem.onPinchScale]
+ * is the ratio of successive distances (1.0 while the fingers hold still).
+ */
+private fun pointerDistance(a: PointerInputChange, b: PointerInputChange): Float {
+    val dx = a.position.x - b.position.x
+    val dy = a.position.y - b.position.y
+    return sqrt(dx * dx + dy * dy)
 }
