@@ -262,11 +262,11 @@ fun PlayerContent(
                 videoModifier.graphicsLayer {
                     scaleX = zoomScale
                     scaleY = zoomScale
-                    // graphicsLayer applies translation in this layer's local
-                    // (pre-scale) space and then scales around the pivot, so a
-                    // screen-px pan is pan/scale here to land at pan px.
-                    translationX = zoomPanX / zoomScale
-                    translationY = zoomPanY / zoomScale
+                    // graphicsLayer applies translation AFTER the scale
+                    // (around the pivot), so translationX/Y are already in
+                    // screen px — set them directly for 1:1 finger tracking.
+                    translationX = zoomPanX
+                    translationY = zoomPanY
                 },
         )
 
