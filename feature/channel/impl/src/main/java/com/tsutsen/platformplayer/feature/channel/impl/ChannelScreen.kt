@@ -852,18 +852,18 @@ private fun ChannelIconRail(
     selectedTab: Int,
     onSelect: (Int) -> Unit,
 ) {
-    // Full-height sidebar: the buttons form a connected vertical button group
-    // (VerticalButtonGroupSample) that stretches over the whole available
-    // height — each button takes an equal share (weight 1f), so the group's
-    // -6dp connected overlap falls on empty button area, never on the labels.
-    // No rail background: the page background shows through.
+    // Sidebar rail: the buttons form a vertical button group
+    // (VerticalButtonGroupSample shape language) at their natural height —
+    // the group occupies only what it needs, top-aligned. Unlike the sample's
+    // connected -6dp overlap, the buttons are spaced 8dp apart so they never
+    // overlap. No rail background: the page background shows through.
     Column(
         modifier =
             Modifier
                 .width(80.dp)
                 .fillMaxSize()
                 .padding(horizontal = 6.dp, vertical = Tokens.SpaceMd),
-        verticalArrangement = Arrangement.spacedBy((-6).dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         tabs.forEachIndexed { index, tab ->
@@ -888,13 +888,11 @@ private fun ChannelIconRail(
                         pressedShape = ToggleButtonDefaults.pressedShape,
                         checkedShape = ButtonGroupDefaults.connectedButtonCheckedShape,
                     ),
-                // weight 1f: the buttons split the rail's full height evenly,
-                // so the group occupies all available height and the -6dp
-                // connected overlap lands on empty button area.
+                // Natural height (no weight): the group occupies only the
+                // vertical space it needs instead of stretching to fill.
                 modifier =
                     Modifier
                         .width(64.dp)
-                        .weight(1f)
                         .semantics { role = Role.RadioButton },
             ) {
                 Column(
