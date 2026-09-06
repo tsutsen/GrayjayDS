@@ -53,6 +53,8 @@ class ChannelViewModel
                 val contentLoading: Boolean = false,
                 val contentError: String? = null,
                 val playlists: List<Card> = emptyList(),
+                val playlistsLoading: Boolean = false,
+                val playlistsError: String? = null,
                 val isSubscribed: Boolean = false,
                 val notifyEnabled: Boolean = false,
                 val isRefreshing: Boolean = false,
@@ -211,9 +213,25 @@ class ChannelViewModel
             if (state.playlists.isNotEmpty() && !force) return
             val url = state.channel.url
             viewModelScope.launch {
-                val playlists = channelRepository.loadPlaylists(url)
+                // Loading flag gates the empty state: without it the tab would
+                // flash a "No playlists" placeholder for the whole load.
                 _uiState.update {
-                    if (it is ChannelUiState.Loaded) it.copy(playlists = playlists) else it
+                    if (it is ChannelUiState.Loaded) {
+                        it.copy(playlistsLoading = true, playlistsError = null)
+                    } else it
+                }
+                val loaded = runCatching { channelRepository.loadPlaylists(url) }
+                _uiState.update {
+                    if (it is ChannelUiState.Loaded) {
+                        it.copy(
+                            playlists = loaded.getOrElse { e -> emptyList() },
+                            playlistsLoading = false,
+                            playlistsError =
+                                loaded.exceptionOrNull()?.let { e ->
+                                    e.message ?: "Failed to load playlists"
+                                },
+                        )
+                    } else it
                 }
             }
         }
@@ -262,8 +280,16 @@ class ChannelViewModel
         fun toggleSubscription() {
             val state = uiState.value as? ChannelUiState.Loaded ?: return
             val url = state.channel.url
+            val previous = state.isSubscribed
+            // Optimistic flip for responsiveness; the network result reconciles
+            // (a failed toggle reverts to the previous state).
+            _uiState.update {
+                if (it is ChannelUiState.Loaded) it.copy(isSubscribed = !previous) else it
+            }
             viewModelScope.launch {
-                val subscribed = channelRepository.toggleSubscription(url)
+                val subscribed = runCatching { channelRepository.toggleSubscription(url) }
+                    .getOrNull()
+                    ?: previous
                 _uiState.update {
                     if (it is ChannelUiState.Loaded) it.copy(isSubscribed = subscribed) else it
                 }
