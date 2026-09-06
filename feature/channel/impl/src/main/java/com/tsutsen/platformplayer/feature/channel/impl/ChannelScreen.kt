@@ -855,15 +855,16 @@ private fun ChannelIconRail(
     // Sidebar rail: the buttons form a vertical button group
     // (VerticalButtonGroupSample shape language) at their natural height —
     // the group occupies only what it needs, top-aligned. Unlike the sample's
-    // connected -6dp overlap, the buttons are spaced 8dp apart so they never
-    // overlap. No rail background: the page background shows through.
+    // connected -6dp overlap, the buttons are spaced Tokens.SpaceXs apart so
+    // they never overlap. No rail background: the page background shows
+    // through.
     Column(
         modifier =
             Modifier
                 .width(80.dp)
                 .fillMaxSize()
                 .padding(horizontal = 6.dp, vertical = Tokens.SpaceMd),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(Tokens.SpaceXs),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         tabs.forEachIndexed { index, tab ->
@@ -904,7 +905,7 @@ private fun ChannelIconRail(
                         contentDescription = tab.label,
                         modifier = Modifier.size(20.dp),
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(Tokens.SpaceXxs))
                     Text(
                         text = tab.label,
                         style = MaterialTheme.typography.labelSmall,
