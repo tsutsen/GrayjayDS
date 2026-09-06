@@ -19,7 +19,7 @@ import com.tsutsen.platformplayer.core.database.entity.*
         SavedVideoEntity::class,
         NotificationEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 @TypeConverters(SavedVideoTypeConverter::class)
@@ -39,6 +39,29 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun notificationDao(): NotificationDao
 
     companion object {
+        /**
+         * v9 -> v10: stores the video's real posted date (captured at
+         * save/watch time) in saved videos, history, and playlist videos, so
+         * library cards can show the posted date in the bottom-left pill
+         * separately from the "added X ago" badge. Existing rows keep 0
+         * (posted pill hidden) until re-saved/re-watched — same pattern as
+         * the duration/view-count migrations.
+         */
+        val MIGRATION_9_10 =
+            object : Migration(9, 10) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE `saved_video` ADD COLUMN `postedAt` INTEGER NOT NULL DEFAULT 0",
+                    )
+                    db.execSQL(
+                        "ALTER TABLE `history` ADD COLUMN `postedAt` INTEGER NOT NULL DEFAULT 0",
+                    )
+                    db.execSQL(
+                        "ALTER TABLE `playlist_videos` ADD COLUMN `postedAt` INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
+            }
+
         /**
          * v4 -> v5: stores the channel URL alongside the author name in
          * saved videos, history, and playlist videos — the long-press

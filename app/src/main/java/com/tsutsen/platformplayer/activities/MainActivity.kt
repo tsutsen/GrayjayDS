@@ -356,6 +356,11 @@ class MainActivity :
         // methods push validated params (aspect clamped to
         // 100:239..239:100, sourceRectHint center-cropped to the aspect).
         pip = VideoPlaybackPictureInPicture(this)
+        // Double-tap "Picture in picture" gesture routes here. This alpha delegate
+        // has no enter(), so use the platform API (mode-change still hits onPictureInPictureModeChanged).
+        PipSurface.enterPip = {
+            enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().build())
+        }
         pip.addOnPictureInPictureEventListener(
             ContextCompat.getMainExecutor(this),
             object : PictureInPictureDelegate.OnPictureInPictureEventListener {

@@ -88,5 +88,8 @@ internal fun String?.toEngineAction(): GestureAction =
         PlayerGestures.MORPH_TO_FULLSCREEN -> GestureAction.MORPH_TO_FULLSCREEN
         PlayerGestures.MORPH_TO_NORMAL -> GestureAction.MORPH_TO_NORMAL
         PlayerGestures.MORPH_VERTICAL -> GestureAction.MORPH_VERTICAL
+        PlayerGestures.SEEK_HOLD -> GestureAction.SEEK_HOLD
+        PlayerGestures.PLAY_PAUSE -> GestureAction.PLAY_PAUSE
+        PlayerGestures.PIP -> GestureAction.PIP
         else -> GestureAction.NONE
     }

@@ -47,6 +47,7 @@ class HistoryTracker
             currentPositionMs: Long = 0,
             totalDurationMs: Long = 0,
             viewCount: Long? = null,
+            postedAt: Long? = null,
         ) {
             withContext(Dispatchers.IO) {
                 val now = System.currentTimeMillis()
@@ -87,6 +88,7 @@ class HistoryTracker
                             watchedAt = now,
                             viewedAt = now,
                             viewCount = viewCount ?: existing.viewCount,
+                            postedAt = postedAt ?: existing.postedAt,
                         ),
                     )
                 } else {
@@ -104,6 +106,7 @@ class HistoryTracker
                             watchedAt = now,
                             viewedAt = now,
                             viewCount = viewCount ?: 0L,
+                            postedAt = postedAt ?: 0L,
                         )
                     historyDao.upsert(entity)
                 }

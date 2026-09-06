@@ -286,6 +286,7 @@ class PlayerViewModel
                     currentPositionMs = positionMs,
                     totalDurationMs = durationMs,
                     viewCount = video.viewCount,
+                    postedAt = video.publishedAt,
                 )
                 if (durationMs > 0) {
                     libraryRepository.backfillDuration(video.url, durationMs)
@@ -729,6 +730,7 @@ class PlayerViewModel
                     title = initial?.title ?: videoId,
                     author = initial?.author?.name,
                     thumbnailUrl = initial?.thumbnailUrl,
+                    postedAt = initial?.publishedAt,
                 )
             }
         }
@@ -795,6 +797,9 @@ class PlayerViewModel
                 playerRepository.seekTo((current + deltaMs).coerceIn(0, playerRepository.exoPlayer?.duration ?: Long.MAX_VALUE))
             }
         }
+
+        /** Current ExoPlayer position in ms (0 when no player). */
+        fun currentPositionMs(): Long = playerRepository.exoPlayer?.currentPosition ?: 0L
 
         fun setVolume(volume: Float) {
             PlayerEventBus.emit(PlayerEvent.VolumeChanged(volume))

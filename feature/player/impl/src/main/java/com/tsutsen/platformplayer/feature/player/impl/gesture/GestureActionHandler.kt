@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import com.tsutsen.platformplayer.feature.player.impl.PlayerEvent
 import com.tsutsen.platformplayer.feature.player.impl.PlayerEventBus
+import com.tsutsen.platformplayer.feature.player.impl.PipSurface
 import com.tsutsen.platformplayer.feature.player.impl.PlayerViewModel
 import com.tsutsen.platformplayer.feature.player.impl.SystemControls
 import kotlinx.coroutines.CoroutineScope
@@ -110,6 +111,12 @@ class PlayerGestureActionHandler(
     @Volatile
     private var lastSpeedHoldReported = 0f
 
+    // --- hold-seek (SEEK_HOLD) state: pause + scrub, commit on release ---
+    private var holdSeekWasPlaying = false
+    private var holdSeekStartMs = 0L
+    private var holdSeekDurationMs = 0L
+    private var holdSeekTargetMs = 0L
+
     fun snapshotBrightness() {
         // Shared across screens: last user value, else device-wide setting.
         currentBrightness = SystemControls.readBrightness(context)
@@ -131,6 +138,7 @@ class PlayerGestureActionHandler(
             GestureAction.SPEEDUP ->
                 handleSpeedHold(frame, baseMultiplier = viewModel.defaultSpeedup)
             GestureAction.SPEEDDOWN -> handleSpeedHold(frame, baseMultiplier = 0.5f)
+            GestureAction.SEEK_HOLD -> handleHoldSeek(frame)
             GestureAction.MORPH_TO_FLOATING -> handleMorphToFloating(frame)
             GestureAction.MORPH_TO_FULLSCREEN -> handleMorphToFullscreen(frame)
             GestureAction.MORPH_TO_NORMAL -> handleMorphToNormal(frame)
@@ -154,6 +162,12 @@ class PlayerGestureActionHandler(
             GestureAction.MORPH_TO_FULLSCREEN -> viewModel.toggleFullscreen()
             GestureAction.MORPH_TO_NORMAL -> viewModel.exitFullscreen()
             GestureAction.CONTEXT_MENU -> {} // stub
+            GestureAction.PLAY_PAUSE -> {
+                val s =
+                    viewModel.uiState.value as? com.tsutsen.platformplayer.feature.player.impl.PlayerUiState.Loaded
+                if (s != null) { if (s.isPlaying) viewModel.pause() else viewModel.resume() }
+            }
+            GestureAction.PIP -> PipSurface.enterPip?.invoke()
             else -> {}
         }
     }
@@ -217,6 +231,9 @@ class PlayerGestureActionHandler(
         private const val SPEED_HOLD_DEADZONE_PX = 48f
         private const val SPEED_STEP = 0.1f
 
+        /** Hold-seek scrub: horizontal px per ms of video (30ms/px). */
+        private const val SEEK_HOLD_PX_TO_MS = 30f
+
         /** Keep-alive interval for speed hold — keeps badge visible during still holds. */
         private const val KEEP_ALIVE_INTERVAL_MS = 100L
     }
@@ -224,11 +241,14 @@ class PlayerGestureActionHandler(
     // ---- Speed hold with optional swipe modulation ----
     //    Horizontal swipe changes speed in 0.1x steps.
     private fun handleSpeedHold(frame: GestureFrame, baseMultiplier: Float) {
+        // base = current speed * multiplier (multiplicative, like the controller
+        // speed buttons): holding at 2x goes to 4x, not to a fixed 2x.
         when (frame.phase) {
             GesturePhase.START -> {
                 snapshotSpeed()
-                lastSpeedHoldReported = baseMultiplier
-                viewModel.setPlaybackSpeed(baseMultiplier)
+                val base = (originalSpeed * baseMultiplier).coerceIn(0.25f, 4f)
+                lastSpeedHoldReported = base
+                viewModel.setPlaybackSpeed(base)
                 // Start keep-alive coroutine — re-emits the *current* speed periodically so
                 // the badge stays visible during still holds. Re-emitting the base here would
                 // snap the badge back to x2 while the finger is held after a movement step.
@@ -244,6 +264,7 @@ class PlayerGestureActionHandler(
                 }
             }
             GesturePhase.ACTIVE -> {
+                val base = (originalSpeed * baseMultiplier).coerceIn(0.25f, 4f)
                 // totalDelta.x: positive = swipe right (faster), negative = left (slower).
                 // Deadzone: a still hold (tap/long-press slot) must never
                 // modulate speed, no matter how high the swipe speed is set —
@@ -252,7 +273,7 @@ class PlayerGestureActionHandler(
                 val steps =
                     if (abs(dx) < SPEED_HOLD_DEADZONE_PX) 0
                     else (dx / (SPEED_SWIPE_STEP_PX / viewModel.speedupSensitivity)).toInt()
-                val speed = (baseMultiplier + steps * SPEED_STEP).coerceIn(0.25f, 4f)
+                val speed = (base + steps * SPEED_STEP).coerceIn(0.25f, 4f)
                 // Round to nearest 0.1 to avoid floating-point drift
                 val snapped = (speed * 10).toInt() / 10f
                 if (snapped != lastSpeedHoldReported) {
@@ -264,6 +285,36 @@ class PlayerGestureActionHandler(
                 speedHoldJob?.cancel()
                 speedHoldJob = null
                 viewModel.setPlaybackSpeed(originalSpeed)
+            }
+        }
+    }
+
+    // ---- Hold-seek (SEEK_HOLD): pause, scrub with horizontal drift, commit on release ----
+    private fun handleHoldSeek(frame: GestureFrame) {
+        when (frame.phase) {
+            GesturePhase.START -> {
+                val state =
+                    viewModel.uiState.value as? com.tsutsen.platformplayer.feature.player.impl.PlayerUiState.Loaded
+                        ?: return
+                if (state.durationMs <= 0) return
+                holdSeekWasPlaying = state.isPlaying
+                holdSeekDurationMs = state.durationMs
+                holdSeekStartMs = viewModel.currentPositionMs()
+                holdSeekTargetMs = holdSeekStartMs
+                if (state.isPlaying) viewModel.pause()
+            }
+            GesturePhase.ACTIVE -> {
+                val dx = frame.totalDelta.x
+                val target =
+                    (holdSeekStartMs + dx * SEEK_HOLD_PX_TO_MS).toLong().coerceIn(0L, holdSeekDurationMs)
+                if (target != holdSeekTargetMs) {
+                    holdSeekTargetMs = target
+                    PlayerEventBus.emit(PlayerEvent.SeekPreview(target))
+                }
+            }
+            GesturePhase.END -> {
+                viewModel.seekTo(holdSeekTargetMs)
+                if (holdSeekWasPlaying) viewModel.resume()
             }
         }
     }

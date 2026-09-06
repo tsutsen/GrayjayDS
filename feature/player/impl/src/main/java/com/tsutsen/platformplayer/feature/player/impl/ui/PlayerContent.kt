@@ -15,13 +15,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -167,6 +170,8 @@ fun PlayerContent(
     // Shared with PlayerControls, which measures the live bottom bar height
     // (the bar unmounts when hidden, but the last measured height stays).
     val bottomBarHeightPx = remember { mutableIntStateOf(0) }
+    // Pinch-to-zoom scale (default gesture, non-configurable). Reset on mode change below.
+    var zoomScale by remember { mutableFloatStateOf(1f) }
     // Subtitles respect the controls: when the bottom bar pops up, the
     // captions slide up above it (and back down with it) on the same 200ms
     // curve the bars use, so text and bar move as one.
@@ -208,6 +213,8 @@ fun PlayerContent(
         }
     }
     LaunchedEffect(detailsVisible) { detailsComposed.value = detailsVisible }
+    // Reset the pinch zoom whenever the player changes mode.
+    LaunchedEffect(state.isFullscreen, state.isMinimized) { zoomScale = 1f }
     // Time-based fade-IN: the p-based alpha window (0.1-0.4) is traversed in
     // only ~90ms of the 300ms click-to-expand tween, so the details would
     // pop in. Multiply by a settle that runs 0->1 whenever the details
@@ -236,7 +243,11 @@ fun PlayerContent(
         // here.
         PlayerVideoSurface(
             player = player,
-            modifier = Modifier.then(videoModifier),
+            modifier =
+                videoModifier.graphicsLayer {
+                    scaleX = zoomScale
+                    scaleY = zoomScale
+                },
         )
 
         // ==================== 1b. Subtitle overlay ====================
@@ -327,6 +338,19 @@ fun PlayerContent(
             onOffsetChanged = onMiniOffsetChanged,
             onExpand = onExpand,
             )
+
+        // ==================== 2b. Pinch-to-zoom (default, non-configurable) ====================
+        // Sits above the gesture system and only reacts to 2+ pointers, so
+        // single-pointer taps/drags/holds still reach the gesture system below.
+        // The video surface carries the matching scale (graphicsLayer above).
+        Box(
+            modifier =
+                videoModifier.pointerInput(Unit) {
+                    detectTransformGestures { _, _, gestureScale, _ ->
+                        zoomScale = (zoomScale * gestureScale).coerceIn(1f, 3f)
+                    }
+                },
+        )
 
         // ==================== 3. Details panel (LazyColumn) ====================
         // Rendered on top of the gesture layer so the LazyColumn can receive scroll
@@ -444,9 +468,10 @@ fun PlayerContent(
                 modifier = videoModifier,
                 contentAlignment = Alignment.Center,
             ) {
-                LoadingIndicator(
+                ContainedLoadingIndicator(
                     modifier = Modifier.size(48.dp),
-                    color = Color.White,
+                    containerColor = Color.Black.copy(alpha = 0.35f),
+                    indicatorColor = Color.White,
                 )
             }
         }

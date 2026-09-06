@@ -22,6 +22,11 @@ object PlayerGestures {
     const val MORPH_TO_FULLSCREEN = "morph_fullscreen"
     const val MORPH_TO_NORMAL = "morph_normal"
     const val MORPH_VERTICAL = "morph_vertical"
+    // Hold: pause + horizontal scrub, commit seek on release.
+    const val SEEK_HOLD = "seek_hold"
+    // Double-tap instant actions.
+    const val PLAY_PAUSE = "play_pause"
+    const val PIP = "pip"
 
     /** Player states with editable gesture sections. */
     const val MODE_FULLSCREEN = "fullscreen"
@@ -45,6 +50,9 @@ object PlayerGestures {
             MORPH_TO_NORMAL to "Morph to normal",
             // Direction-aware: up = fullscreen, down = floating.
             MORPH_VERTICAL to "Morph to floating/fullscreen",
+            SEEK_HOLD to "Hold to seek",
+            PLAY_PAUSE to "Play / pause",
+            PIP to "Picture in picture",
         )
 
     /** Display labels for the gesture types. */
@@ -114,11 +122,14 @@ object PlayerGestures {
             "double_tap" ->
                 listOf(
                     NONE,
+                    PLAY_PAUSE,
+                    MORPH_TO_FULLSCREEN,
+                    MORPH_TO_FLOATING,
+                    MORPH_TO_NORMAL,
+                    PIP,
                     REWIND_BACK,
                     REWIND_FORWARD,
                     CONTEXT_MENU,
-                    MORPH_TO_FLOATING,
-                    MORPH_TO_FULLSCREEN,
                 )
 
             "hold" ->
@@ -126,6 +137,7 @@ object PlayerGestures {
                     NONE,
                     SPEEDUP,
                     SPEEDDOWN,
+                    SEEK_HOLD,
                     REWIND_BACK,
                     REWIND_FORWARD,
                     VOLUME,
@@ -154,7 +166,7 @@ object PlayerGestures {
                 ),
             "bottomCenter" to
                 mapOf(
-                    "hold" to NONE,
+                    "hold" to SEEK_HOLD,
                     "double_tap" to NONE,
                     "swipe_h" to NONE,
                     "swipe_v" to swipeV("bottomCenter"),

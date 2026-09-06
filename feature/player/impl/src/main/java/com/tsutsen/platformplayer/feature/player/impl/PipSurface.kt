@@ -13,4 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
  */
 object PipSurface {
     val surfaceView = MutableStateFlow<View?>(null)
+
+    /** Set by the host activity to enter system PiP (PiP entry is owned by the app). */
+    var enterPip: (() -> Unit)? = null
 }

@@ -55,10 +55,15 @@ enum class GestureAction {
     SPEEDUP,
     SPEEDDOWN,
 
+    // Hold: pause + horizontal scrub, commit seek on release.
+    SEEK_HOLD,
+
     // Instant (double-tap)
     REWIND_FORWARD,
     REWIND_BACK,
     CONTEXT_MENU,
+    PLAY_PAUSE,
+    PIP,
 
     // Morph transitions (swipe or instant depending on config)
     MORPH_TO_FLOATING,

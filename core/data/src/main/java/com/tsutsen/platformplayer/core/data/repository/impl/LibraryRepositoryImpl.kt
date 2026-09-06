@@ -159,7 +159,8 @@ class LibraryRepositoryImpl
                 authorUrl = authorUrl,
                 durationMs = durationMs.takeIf { it > 0 },
                 viewCount = viewCount.takeIf { it > 0 },
-                publishedAt = addedAt,
+                publishedAt = postedAt.takeIf { it > 0 },
+                addedAt = addedAt,
                 url = contentUrl,
             )
 
@@ -177,6 +178,7 @@ class LibraryRepositoryImpl
                     thumbnailUrl = video.thumbnailUrl,
                     durationMs = video.durationMs ?: 0L,
                     viewCount = video.viewCount ?: 0L,
+                    postedAt = video.publishedAt ?: 0L,
                 ),
             )
         }
@@ -247,6 +249,7 @@ class LibraryRepositoryImpl
                     thumbnailUrl = video.thumbnailUrl,
                     durationMs = video.durationMs ?: 0L,
                     viewCount = video.viewCount ?: 0L,
+                    postedAt = video.publishedAt ?: 0L,
                 ),
             )
             val playlist = playlistDao.getById(playlistId)
@@ -316,7 +319,8 @@ class LibraryRepositoryImpl
                 authorUrl = authorUrl,
                 durationMs = durationMs.takeIf { it > 0 },
                 viewCount = viewCount.takeIf { it > 0 },
-                publishedAt = addedAt,
+                publishedAt = postedAt.takeIf { it > 0 },
+                addedAt = addedAt,
                 url = contentUrl,
             )
 
@@ -329,7 +333,8 @@ class LibraryRepositoryImpl
                 authorUrl = authorUrl,
                 durationMs = totalDurationMs.takeIf { it > 0 },
                 viewCount = viewCount.takeIf { it > 0 },
-                publishedAt = watchedAt,
+                publishedAt = postedAt.takeIf { it > 0 },
+                addedAt = watchedAt,
                 url = contentUrl,
             )
 

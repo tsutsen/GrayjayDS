@@ -239,21 +239,62 @@ private fun AllCard(
     count: Int,
     onClick: () -> Unit,
 ) {
-    Box(
+    // Mirrors VideoCard's layout (16:9 cover + a title/meta text area) so it
+    // lines up with the real strip cards' height without any fixed height —
+    // the cover keeps its aspect ratio and the text area reserves the same
+    // line heights the cards use (2-line title + 1-line meta).
+    Card(
         modifier =
             Modifier
                 .width(STRIP_CARD_WIDTH)
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(BluejayTokens().radius.sm))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+        shape = RoundedCornerShape(BluejayTokens().radius.sm),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
     ) {
-        Text(
-            text = "All ($count)",
-            fontWeight = FontWeight.SemiBold,
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "All",
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+            Column(
+                modifier =
+                    Modifier
+                        .padding(Tokens.SpaceMd)
+                        .fillMaxWidth(),
+            ) {
+                Text(
+                    text = "$count",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    minLines = 2,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "videos",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }
 

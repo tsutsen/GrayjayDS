@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Forward10
@@ -799,8 +800,31 @@ fun PlayerView(
                             badgeState =
                                 GestureBadgeState(
                                     key = "speed",
-                                    label = "%.2fx".format(event.speed),
+                                    // "2.00" -> "2.0", "0.25" -> "0.25", + the × glyph.
+                                    label =
+                                        run {
+                                            var t = "%.2f".format(event.speed).trimEnd('0')
+                                            if (t.endsWith(".")) t += "0"
+                                            "$t×"
+                                        },
                                     icon = Icons.Outlined.Speed,
+                                    visible = true,
+                                    keepAlive = badgeKeepAliveCounter,
+                                )
+                        }
+
+                        is PlayerEvent.SeekPreview -> {
+                            val t = event.targetMs / 1000
+                            val label =
+                                if (t / 3600 > 0)
+                                    "%d:%02d:%02d".format(t / 3600, t / 60 % 60, t % 60)
+                                else "%d:%02d".format(t / 60, t % 60)
+                            badgeKeepAliveCounter++
+                            badgeState =
+                                GestureBadgeState(
+                                    key = "seek_preview",
+                                    label = label,
+                                    icon = Icons.Default.AccessTime,
                                     visible = true,
                                     keepAlive = badgeKeepAliveCounter,
                                 )
