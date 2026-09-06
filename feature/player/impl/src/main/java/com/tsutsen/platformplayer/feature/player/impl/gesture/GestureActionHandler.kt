@@ -231,8 +231,11 @@ class PlayerGestureActionHandler(
         private const val SPEED_HOLD_DEADZONE_PX = 48f
         private const val SPEED_STEP = 0.1f
 
-        /** Hold-seek scrub: horizontal px per ms of video (30ms/px). */
-        private const val SEEK_HOLD_PX_TO_MS = 30f
+        /**
+         * Hold-seek scrub: ms of video per horizontal px of finger drift
+         * (100px ≈ 12s; a full-width swipe ≈ a 20-minute video).
+         */
+        private const val SEEK_HOLD_PX_TO_MS = 120f
 
         /** Keep-alive interval for speed hold — keeps badge visible during still holds. */
         private const val KEEP_ALIVE_INTERVAL_MS = 100L
