@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -34,17 +35,21 @@ import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.ShortText
 import androidx.compose.material.icons.filled.VideoCall
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
+import androidx.compose.material3.ToggleButtonShapes
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -67,6 +72,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -837,44 +845,68 @@ private fun WideVideoCell(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ChannelIconRail(
     tabs: List<ChannelTab>,
     selectedTab: Int,
     onSelect: (Int) -> Unit,
 ) {
+    // Full-height sidebar: the rail occupies the available height (background
+    // included) and hosts a connected vertical button group
+    // (VerticalButtonGroupSample) — the checked section takes the group's
+    // checked shape, first/last buttons round the group's outer corners.
     Column(
         modifier =
             Modifier
                 .width(80.dp)
                 .fillMaxSize()
-                .padding(vertical = Tokens.SpaceMd),
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .padding(horizontal = 6.dp, vertical = Tokens.SpaceMd),
+        verticalArrangement = Arrangement.spacedBy((-6).dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         tabs.forEachIndexed { index, tab ->
-            // Circle bubbles: the selected section's icon sits in a filled
-            // tonal bubble (FilledTonalIconButton's default shape is round);
-            // unselected sections stay bare icon buttons with the circular
-            // ripple as their press feedback.
-            if (index == selectedTab) {
-                FilledTonalIconButton(
-                    onClick = { onSelect(index) },
-                    modifier = Modifier.padding(vertical = 8.dp),
-                ) {
-                    Icon(
-                        imageVector = tab.icon,
-                        contentDescription = tab.label,
-                    )
+            val shape =
+                when (index) {
+                    0 ->
+                        (ButtonGroupDefaults.connectedMiddleButtonShapes().shape
+                                as RoundedCornerShape)
+                            .copy(topStart = CornerSize(100), topEnd = CornerSize(100))
+                    tabs.lastIndex ->
+                        (ButtonGroupDefaults.connectedMiddleButtonShapes().shape
+                                as RoundedCornerShape)
+                            .copy(bottomStart = CornerSize(100), bottomEnd = CornerSize(100))
+                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes().shape
                 }
-            } else {
-                IconButton(
-                    onClick = { onSelect(index) },
-                    modifier = Modifier.padding(vertical = 8.dp),
+            ToggleButton(
+                checked = selectedTab == index,
+                onCheckedChange = { onSelect(index) },
+                shapes =
+                    ToggleButtonShapes(
+                        shape = shape,
+                        pressedShape = ToggleButtonDefaults.pressedShape,
+                        checkedShape = ButtonGroupDefaults.connectedButtonCheckedShape,
+                    ),
+                modifier =
+                    Modifier
+                        .width(64.dp)
+                        .semantics { role = Role.RadioButton },
+            ) {
+                Column(
+                    modifier = Modifier.padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Icon(
                         imageVector = tab.icon,
                         contentDescription = tab.label,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = tab.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
                     )
                 }
             }
