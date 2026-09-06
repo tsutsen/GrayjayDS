@@ -139,7 +139,9 @@ fun SubscriptionsScreen(
                         onRefresh = viewModel::refresh,
                         onLoadMore = viewModel::loadMore,
                         onVideoLongClick = { optionsCard = it },
-                        onItemClicked = { url -> playerViewModel.play(url) },
+                        // Pass the card (not just the URL) so the player's
+                        // details are prefilled instantly, like the home feed.
+                        onItemClicked = { card -> playerViewModel.play(card) },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -198,7 +200,7 @@ private fun SubscriptionsContent(
     onStreamsToggle: () -> Unit,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
-    onItemClicked: (String) -> Unit,
+    onItemClicked: (ModelVideoCard) -> Unit,
     onVideoLongClick: (ModelVideoCard) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -301,14 +303,14 @@ private fun SubscriptionsContent(
                                 layout = ContainerLayout.Grid(gridColumns),
                                 isLoading = false,
                                 hasMorePages = state.hasMorePages,
-                                onCardClick = { card -> onItemClicked((card as ModelVideoCard).url) },
+                                onCardClick = { card -> onItemClicked(card as ModelVideoCard) },
                                 onLoadMore = onLoadMore,
                                 modifier = Modifier.fillMaxWidth(),
                                 contentPadding = PaddingValues(ContentCardInnerGap()),
                             ) { card ->
                                 VideoCard(
                                     card = card as ModelVideoCard,
-                                    onClick = { onItemClicked((card as ModelVideoCard).url) },
+                                    onClick = { onItemClicked(card as ModelVideoCard) },
                                     onLongClick = { onVideoLongClick(card as ModelVideoCard) },
                                     modifier = Modifier.fillMaxWidth(),
                                     watchProgress = watchStates[card.url]?.takeIf { !it.isWatched }?.progress,
@@ -415,14 +417,14 @@ private fun SubscriptionsContent(
                             layout = ContainerLayout.List,
                             isLoading = false,
                             hasMorePages = state.hasMorePages,
-                            onCardClick = { card -> onItemClicked((card as ModelVideoCard).url) },
+                            onCardClick = { card -> onItemClicked(card as ModelVideoCard) },
                             onLoadMore = onLoadMore,
                             modifier = Modifier.fillMaxWidth(),
                             contentPadding = PaddingValues(ContentCardInnerGap()),
                         ) { card ->
                             VideoCard(
                                 card = card as ModelVideoCard,
-                                onClick = { onItemClicked((card as ModelVideoCard).url) },
+                                onClick = { onItemClicked(card as ModelVideoCard) },
                                 onLongClick = { onVideoLongClick(card as ModelVideoCard) },
                                 modifier = Modifier.fillMaxWidth(),
                                 watchProgress = watchStates[card.url]?.takeIf { !it.isWatched }?.progress,
