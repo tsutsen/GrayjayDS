@@ -190,6 +190,10 @@ fun PlayerView(
 
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubPositionMs by remember { mutableStateOf(0L) }
+    // Hold-seek scrub target while the player is paused mid-scrub (null = not
+    // previewing). Drives the badge and the timeline playhead; cleared when
+    // the scrub commits (SeekCommitted) or a new video loads.
+    var seekPreviewMs by remember { mutableStateOf<Long?>(null) }
 
 
     val player =
@@ -551,6 +555,7 @@ fun PlayerView(
             LaunchedEffect(state.currentVideo?.url) {
                 isScrubbing = false
                 scrubPositionMs = 0L
+                seekPreviewMs = null
             }
 
             val isMinimized = state.isMinimized
@@ -814,6 +819,7 @@ fun PlayerView(
                         }
 
                         is PlayerEvent.SeekPreview -> {
+                            seekPreviewMs = event.targetMs
                             val t = event.targetMs / 1000
                             val label =
                                 if (t / 3600 > 0)
@@ -828,6 +834,12 @@ fun PlayerView(
                                     visible = true,
                                     keepAlive = badgeKeepAliveCounter,
                                 )
+                        }
+
+                        is PlayerEvent.SeekCommitted -> {
+                            // The scrub settled: the live position flow takes
+                            // over from here on.
+                            seekPreviewMs = null
                         }
 
                         is PlayerEvent.BrightnessChanged ->
@@ -1128,6 +1140,7 @@ fun PlayerView(
                         badgeState = badgeState,
                         onBadgeSessionEnded = remember { { badgeState = GestureBadgeState() } },
                         scrubPositionMs = scrubPositionMs,
+                        seekPreviewMs = seekPreviewMs,
                         subtitlesOn =
                             state.selectedSubtitle != "Off" && state.selectedSubtitle != "Auto",
                         onSubtitleToggle = remember { { viewModel.toggleSubtitles() } },

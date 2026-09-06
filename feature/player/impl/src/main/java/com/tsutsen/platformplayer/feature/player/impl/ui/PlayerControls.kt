@@ -71,6 +71,7 @@ fun PlayerControls(
     subtitlesOn: Boolean,
     isScrubbing: Boolean,
     scrubPositionMs: Long,
+    seekPreviewMs: Long? = null,
     onSubtitleToggle: () -> Unit,
 
     onPlayPause: () -> Unit,
@@ -305,6 +306,7 @@ fun PlayerControls(
                                                 onScrubFinished = onScrubFinished,
                                                 isScrubbing = isScrubbing,
                                                 scrubPositionMs = scrubPositionMs,
+                                                seekPreviewMs = seekPreviewMs,
                                                 subtitlesOn = subtitlesOn,
                                                 onSubtitleToggle = onSubtitleToggle,
                                                 chapters = state.chapters,
@@ -348,6 +350,7 @@ fun PlayerControls(
                                                     onScrubFinished = onScrubFinished,
                                                     isScrubbing = isScrubbing,
                                                     scrubPositionMs = scrubPositionMs,
+                                                    seekPreviewMs = seekPreviewMs,
                                                     subtitlesOn = subtitlesOn,
                                                     onSubtitleToggle = onSubtitleToggle,
                                                     chapters = state.chapters,

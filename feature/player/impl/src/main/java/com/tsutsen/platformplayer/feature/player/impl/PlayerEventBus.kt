@@ -22,6 +22,9 @@ sealed interface PlayerEvent {
     /** Absolute-time seek preview (hold-seek scrub), not yet committed. */
     data class SeekPreview(val targetMs: Long) : PlayerEvent
 
+    /** The hold-seek scrub settled: [targetMs] is now the committed position. */
+    data class SeekCommitted(val targetMs: Long) : PlayerEvent
+
     data class PlaybackSpeedChanged(val speed: Float) : PlayerEvent
 
     data class VolumeChanged(val level: Float) : PlayerEvent

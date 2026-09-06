@@ -314,6 +314,10 @@ class PlayerGestureActionHandler(
             }
             GesturePhase.END -> {
                 viewModel.seekTo(holdSeekTargetMs)
+                // The preview position becomes the committed one — consumers
+                // (the badge, the timeline playhead) can hand over to the live
+                // position flow from here.
+                PlayerEventBus.emit(PlayerEvent.SeekCommitted(holdSeekTargetMs))
                 if (holdSeekWasPlaying) viewModel.resume()
             }
         }
