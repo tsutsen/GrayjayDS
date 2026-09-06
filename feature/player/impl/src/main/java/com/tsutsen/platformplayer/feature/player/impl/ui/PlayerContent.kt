@@ -168,8 +168,20 @@ fun PlayerContent(
     // Shared with PlayerControls, which measures the live bottom bar height
     // (the bar unmounts when hidden, but the last measured height stays).
     val bottomBarHeightPx = remember { mutableIntStateOf(0) }
-    // Pinch-to-zoom scale (default gesture, non-configurable). Reset on mode change below.
+    // Pinch-to-zoom scale (default gesture, non-configurable) and pan offset
+    // in screen px (0f = centered). Reset on mode change below.
     var zoomScale by remember { mutableFloatStateOf(1f) }
+    var zoomPanX by remember { mutableFloatStateOf(0f) }
+    var zoomPanY by remember { mutableFloatStateOf(0f) }
+    // Keep the pan inside the zoomed content: the scaled video extends
+    // (zoomScale - 1) * size / 2 past the fitted rect on each side.
+    fun clampZoomPan() {
+        val layout = surface.videoLayout(isLandscape, density)
+        val maxX = (zoomScale - 1f) * layout.widthPx / 2f
+        val maxY = (zoomScale - 1f) * layout.heightPx / 2f
+        zoomPanX = zoomPanX.coerceIn(-maxX, maxX)
+        zoomPanY = zoomPanY.coerceIn(-maxY, maxY)
+    }
     // Subtitles respect the controls: when the bottom bar pops up, the
     // captions slide up above it (and back down with it) on the same 200ms
     // curve the bars use, so text and bar move as one.
@@ -212,7 +224,11 @@ fun PlayerContent(
     }
     LaunchedEffect(detailsVisible) { detailsComposed.value = detailsVisible }
     // Reset the pinch zoom whenever the player changes mode.
-    LaunchedEffect(state.isFullscreen, state.isMinimized) { zoomScale = 1f }
+    LaunchedEffect(state.isFullscreen, state.isMinimized) {
+        zoomScale = 1f
+        zoomPanX = 0f
+        zoomPanY = 0f
+    }
     // Time-based fade-IN: the p-based alpha window (0.1-0.4) is traversed in
     // only ~90ms of the 300ms click-to-expand tween, so the details would
     // pop in. Multiply by a settle that runs 0->1 whenever the details
@@ -245,6 +261,11 @@ fun PlayerContent(
                 videoModifier.graphicsLayer {
                     scaleX = zoomScale
                     scaleY = zoomScale
+                    // graphicsLayer applies translation in this layer's local
+                    // (pre-scale) space and then scales around the pivot, so a
+                    // screen-px pan is pan/scale here to land at pan px.
+                    translationX = zoomPanX / zoomScale
+                    translationY = zoomPanY / zoomScale
                 },
         )
 
@@ -342,7 +363,17 @@ fun PlayerContent(
             // touch slop, starving all single-finger gestures on the video.
             onPinchScale = { scale ->
                 zoomScale = (zoomScale * scale).coerceIn(1f, 3f)
+                clampZoomPan()
             },
+            // While zoomed in, single-finger drags (and the pinch centroid)
+            // pan the zoom window with screen-px deltas; the surface above
+            // carries the accumulated (clamped) offset.
+            onZoomPan = { dx, dy ->
+                zoomPanX += dx
+                zoomPanY += dy
+                clampZoomPan()
+            },
+            zoomActive = { zoomScale > 1f },
             // Floating mode
             onOffsetChanged = onMiniOffsetChanged,
             onExpand = onExpand,
