@@ -28,12 +28,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.ShortText
 import androidx.compose.material.icons.filled.VideoCall
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.SmartDisplay
+import androidx.compose.material.icons.outlined.WebStories
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Card
@@ -274,10 +276,10 @@ fun ChannelScreen(
                 // is present (Videos=0, Shorts=1?, Playlists, About).
                 val tabs =
                     buildList {
-                        add(ChannelTab("Videos", Icons.Filled.VideoCall))
-                        if (state.hasShorts) add(ChannelTab("Shorts", Icons.Filled.ShortText))
+                        add(ChannelTab("Videos", Icons.Outlined.SmartDisplay))
+                        if (state.hasShorts) add(ChannelTab("Shorts", Icons.Outlined.WebStories))
                         add(ChannelTab("Playlists", Icons.Filled.PlaylistPlay))
-                        add(ChannelTab("About", Icons.Filled.Description))
+                        add(ChannelTab("About", Icons.Outlined.Info))
                     }
                 val tabPlaylists = tabs.indexOfFirst { it.label == "Playlists" }
                 val tabShorts = tabs.indexOfFirst { it.label == "Shorts" }
