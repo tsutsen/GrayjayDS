@@ -105,6 +105,10 @@ internal fun CompanionVideoOptionsSheet(
     card: CoreVideoCard,
     onDismiss: () -> Unit,
     onPlayItem: (ContentItem) -> Unit,
+    // The sheet itself dismisses after invoking this; the second screen
+    // has no navigation of its own, so this routes to the main screen's
+    // navigator (the same target as channel taps on the video/dash pages).
+    onGoToChannel: (String) -> Unit,
     libraryRepository: LibraryRepository,
     downloadsRepository: com.tsutsen.platformplayer.core.data.repository.DownloadsRepository,
     playbackQueueRepository: com.tsutsen.platformplayer.core.data.repository.PlaybackQueueRepository,
@@ -136,8 +140,7 @@ internal fun CompanionVideoOptionsSheet(
             onPlayItem(card.toContentItem())
             onDismiss()
         },
-        // No navigation on the second screen.
-        onGoToChannel = { onDismiss() },
+        onGoToChannel = onGoToChannel,
         onToggleWatchLater = {
             scope.launch { toggleSaveType(libraryRepository, savedTypes, card, SavedVideoType.WATCH_LATER) }
         },

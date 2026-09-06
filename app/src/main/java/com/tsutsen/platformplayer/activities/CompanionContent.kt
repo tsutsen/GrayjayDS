@@ -329,6 +329,7 @@ internal fun CompanionContent(
                         card = card,
                         onDismiss = { optionsCard = null },
                         onPlayItem = onPlayItem,
+                        onGoToChannel = onChannelClick,
                         libraryRepository = libraryRepository,
                         downloadsRepository = downloadsRepository,
                         playbackQueueRepository = playbackQueueRepository,
