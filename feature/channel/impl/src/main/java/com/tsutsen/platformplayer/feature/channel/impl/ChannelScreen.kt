@@ -900,6 +900,13 @@ private fun ChannelIconRail(
                         pressedShape = ToggleButtonDefaults.pressedShape,
                         checkedShape = ButtonGroupDefaults.connectedButtonCheckedShape,
                     ),
+                // The default small-button padding (16 dp each side) leaves
+                // only 32 dp for the label on a 64 dp button and clips
+                // "Shorts"/"Playlists". Tighten the horizontal padding to
+                // Tokens.SpaceXs (48 dp of label width); keep the 10 dp
+                // vertical so the button height is unchanged.
+                contentPadding =
+                    PaddingValues(horizontal = Tokens.SpaceXs, vertical = 10.dp),
                 // Natural height (no weight): the group occupies only the
                 // vertical space it needs instead of stretching to fill.
                 modifier =
