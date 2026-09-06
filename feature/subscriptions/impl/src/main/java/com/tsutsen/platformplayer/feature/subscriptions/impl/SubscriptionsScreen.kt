@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -36,6 +37,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -181,6 +183,7 @@ fun SubscriptionsScreen(
 /**
  * Main subscriptions content area.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SubscriptionsContent(
     state: SubscriptionsUiState.Success,
@@ -398,6 +401,13 @@ private fun SubscriptionsContent(
                     isRefreshing = state.isRefreshing || (state.isLoading && state.items.isEmpty()),
                     state = pullToRefreshState,
                     onRefresh = onRefresh,
+                    indicator = {
+                        PullToRefreshDefaults.LoadingIndicator(
+                            state = pullToRefreshState,
+                            isRefreshing = state.isRefreshing || (state.isLoading && state.items.isEmpty()),
+                            modifier = Modifier.align(Alignment.TopCenter),
+                        )
+                    },
                     content = {
                         ContentCard(modifier = Modifier.fillMaxSize()) {
                             VideoContainer(

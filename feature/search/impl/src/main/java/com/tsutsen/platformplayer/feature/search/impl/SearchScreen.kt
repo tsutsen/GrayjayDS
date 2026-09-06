@@ -49,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -120,6 +121,7 @@ import kotlin.math.roundToInt
  *  2. Search history list with background (shown on first open or when field is focused)
  *  3. Search result grid (shown after search is executed)
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SearchScreen(
     navigator: Navigator,
@@ -553,6 +555,13 @@ fun SearchScreen(
                                 state = refreshingState,
                                 onRefresh = {
                                     viewModel.search(searchQuery)
+                                },
+                                indicator = {
+                                    PullToRefreshDefaults.LoadingIndicator(
+                                        state = refreshingState,
+                                        isRefreshing = uiState.isLoading,
+                                        modifier = Modifier.align(Alignment.TopCenter),
+                                    )
                                 },
                                 content = {
                                     Column(modifier = Modifier.fillMaxSize()) {

@@ -571,10 +571,13 @@ private fun TippedBars(
                                     text = day.day.labelFull,
                                     style = MaterialTheme.typography.labelLarge,
                                 )
+                                // No color override: inherit the tooltip's own
+                                // content color (inverseOnSurface on the
+                                // inverseSurface container), so the time keeps
+                                // contrast in both themes.
                                 Text(
                                     text = humanDuration(day.ms),
                                     style = MaterialTheme.typography.titleSmall,
-                                    color = scheme.primary,
                                 )
                                 day.topCreator?.let { creator ->
                                     Text(

@@ -27,7 +27,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import com.tsutsen.platformplayer.core.designsystem.theme.BluejayTokens
 import com.tsutsen.platformplayer.core.model.SourceInfo
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import android.content.Intent
 import android.net.Uri
@@ -217,6 +219,7 @@ fun HomeScreen(
  * Home feed content with orientation-aware layout.
  * Portrait: single-column list. Landscape: 3-column grid.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun HomeFeedContent(
     cards: List<Card>,
@@ -244,6 +247,13 @@ private fun HomeFeedContent(
             isRefreshing = isRefreshing || (isLoading && cards.isEmpty()),
             state = refreshingState,
             onRefresh = onRefresh,
+            indicator = {
+                PullToRefreshDefaults.LoadingIndicator(
+                    state = refreshingState,
+                    isRefreshing = isRefreshing || (isLoading && cards.isEmpty()),
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
+            },
             content = {
                 ContentCard(modifier = Modifier.fillMaxSize()) {
                     Column(modifier = Modifier.fillMaxSize()) {

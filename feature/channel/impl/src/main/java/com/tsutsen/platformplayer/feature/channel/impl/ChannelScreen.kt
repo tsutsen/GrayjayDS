@@ -55,6 +55,7 @@ import androidx.compose.material3.ToggleButtonShapes
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -105,7 +106,7 @@ import com.tsutsen.platformplayer.core.model.VideoCard as CoreVideoCard
  * Channel detail screen: hero header, Videos / Playlists / About tabs.
  * Portrait: top TabRow. Wide: 80 dp vertical icon rail on the right.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ChannelScreen(
     channelUrl: String,
@@ -119,6 +120,7 @@ fun ChannelScreen(
     val isWide = rememberIsWide()
     var selectedTab by remember { mutableIntStateOf(TAB_VIDEOS) }
     var optionsCard by remember { mutableStateOf<CoreVideoCard?>(null) }
+    val refreshState = rememberPullToRefreshState()
 
     LaunchedEffect(channelUrl) {
         viewModel.load(channelUrl)
@@ -293,9 +295,16 @@ fun ChannelScreen(
                         PullToRefreshBox(
                             // Reuse the pull-to-refresh spinner as the loading indicator.
                             isRefreshing = state.isRefreshing,
-                            state = rememberPullToRefreshState(),
+                            state = refreshState,
                             onRefresh = { viewModel.refresh() },
                             modifier = Modifier.fillMaxSize(),
+                            indicator = {
+                                PullToRefreshDefaults.LoadingIndicator(
+                                    state = refreshState,
+                                    isRefreshing = state.isRefreshing,
+                                    modifier = Modifier.align(Alignment.TopCenter),
+                                )
+                            },
                             content = {
                                 Column(modifier = Modifier.fillMaxSize()) {
                                     if (isWide) {
