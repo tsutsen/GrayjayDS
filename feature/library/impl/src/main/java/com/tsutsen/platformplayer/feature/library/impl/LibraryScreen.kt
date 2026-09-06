@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.tsutsen.platformplayer.core.data.repository.impl.LibraryRepositoryImpl
 import com.tsutsen.platformplayer.core.designsystem.component.ContainerLayout
 import com.tsutsen.platformplayer.core.designsystem.component.PlaylistOptionsSheet
 import com.tsutsen.platformplayer.core.designsystem.component.VideoContainer
@@ -73,6 +74,9 @@ fun LibraryScreen(
 ) {
     val sections by viewModel.sections.collectAsState()
     var optionsCard by remember { mutableStateOf<CoreVideoCard?>(null) }
+    // The section the card was long-pressed in: the "Remove from history"
+    // tile only appears for the History section.
+    var optionsSectionId by remember { mutableStateOf<String?>(null) }
     var optionsPlaylist by remember { mutableStateOf<PlaylistCard?>(null) }
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
 
@@ -103,7 +107,10 @@ fun LibraryScreen(
                                 else -> Unit
                             }
                         },
-                        onVideoLongClick = { optionsCard = it },
+                        onVideoLongClick = { card ->
+                            optionsCard = card
+                            optionsSectionId = section.id
+                        },
                         onPlaylistLongClick = { optionsPlaylist = it },
                         // "playlists" is the LibraryRepositoryImpl.PLAYLISTS_ID
                         // section constant.
@@ -120,6 +127,12 @@ fun LibraryScreen(
             onDismiss = { optionsCard = null },
             onPlay = { playerViewModel.play(card) },
             onGoToChannel = { navigator.navigateToChannel(it) },
+            onRemoveFromHistory =
+                if (optionsSectionId == LibraryRepositoryImpl.HISTORY_ID) {
+                    { viewModel.deleteFromHistory(card.url) }
+                } else {
+                    null
+                },
         )
     }
 

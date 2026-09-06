@@ -65,6 +65,13 @@ class LibrarySectionDetailViewModel
             }
         }
 
+        /** Removes a video from watch history (options sheet, history page). */
+        fun deleteFromHistory(url: String) {
+            viewModelScope.launch {
+                libraryRepository.deleteFromHistory(url)
+            }
+        }
+
         fun loadSection(sectionId: String) {
             if (loadedSectionId == sectionId) return
             loadedSectionId = sectionId

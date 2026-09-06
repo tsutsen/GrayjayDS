@@ -217,6 +217,10 @@ class LibraryRepositoryImpl
             savedVideoDao.deleteByType(url, type)
         }
 
+        override suspend fun deleteFromHistory(url: String) {
+            historyDao.deleteByUrl(url)
+        }
+
         override suspend fun createPlaylist(
             name: String,
             description: String?,

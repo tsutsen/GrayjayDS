@@ -124,6 +124,10 @@ fun VideoOptionsSheet(
     onDownloadWithQuality: ((DownloadQuality) -> Unit)? = null,
     onAddToPlaylist: (Long?) -> Unit,
     onAddToQueue: () -> Unit = {},
+    // Non-null = show a "Remove from history" tile (danger tone). Only the
+    // history contexts pass it (the library's History strip, the history
+    // page) so the tile never appears where the video isn't a history item.
+    onRemoveFromHistory: (() -> Unit)? = null,
     // Queue state: the tile becomes a highlighted "Remove from queue" when
     // the video is already queued, and a dimmed "Now playing" when it is
     // the current video.
@@ -296,6 +300,19 @@ fun VideoOptionsSheet(
                             icon = Icons.Filled.Public,
                             onClick = {
                                 onGoToChannel(it)
+                                onDismiss()
+                            },
+                        ),
+                    )
+                }
+                onRemoveFromHistory?.let { onRemove ->
+                    add(
+                        OptionTile(
+                            label = "Remove from history",
+                            icon = Icons.Filled.Delete,
+                            tone = TileTone.Danger,
+                            onClick = {
+                                onRemove()
                                 onDismiss()
                             },
                         ),

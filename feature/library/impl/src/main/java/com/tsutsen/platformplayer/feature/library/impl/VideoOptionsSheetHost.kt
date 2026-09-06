@@ -37,6 +37,9 @@ fun VideoOptionsSheetHost(
     // The currently playing video's URL (null when unknown): its queue
     // tile shows "Now playing" and is disabled.
     currentVideoUrl: String? = null,
+    // Non-null = the "Remove from history" tile appears (history contexts
+    // only — the library's History strip and the history page).
+    onRemoveFromHistory: (() -> Unit)? = null,
 ) {
     val viewModel: VideoOptionsViewModel = hiltViewModel()
     val savedTypes by viewModel.savedTypes(video.url).collectAsState(initial = emptySet())
@@ -95,6 +98,7 @@ fun VideoOptionsSheetHost(
                 showNewPlaylistDialog = true
             }
         },
+        onRemoveFromHistory = onRemoveFromHistory,
         onAddToQueue = {
             // No onDismiss: the sheet stays open so the user can keep
             // choosing actions.
