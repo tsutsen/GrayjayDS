@@ -852,16 +852,16 @@ private fun ChannelIconRail(
     selectedTab: Int,
     onSelect: (Int) -> Unit,
 ) {
-    // Full-height sidebar: the rail occupies the available height (background
-    // included) and hosts a connected vertical button group
-    // (VerticalButtonGroupSample) — the checked section takes the group's
-    // checked shape, first/last buttons round the group's outer corners.
+    // Full-height sidebar: the buttons form a connected vertical button group
+    // (VerticalButtonGroupSample) that stretches over the whole available
+    // height — each button takes an equal share (weight 1f), so the group's
+    // -6dp connected overlap falls on empty button area, never on the labels.
+    // No rail background: the page background shows through.
     Column(
         modifier =
             Modifier
                 .width(80.dp)
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
                 .padding(horizontal = 6.dp, vertical = Tokens.SpaceMd),
         verticalArrangement = Arrangement.spacedBy((-6).dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -888,9 +888,13 @@ private fun ChannelIconRail(
                         pressedShape = ToggleButtonDefaults.pressedShape,
                         checkedShape = ButtonGroupDefaults.connectedButtonCheckedShape,
                     ),
+                // weight 1f: the buttons split the rail's full height evenly,
+                // so the group occupies all available height and the -6dp
+                // connected overlap lands on empty button area.
                 modifier =
                     Modifier
                         .width(64.dp)
+                        .weight(1f)
                         .semantics { role = Role.RadioButton },
             ) {
                 Column(
