@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -321,7 +322,9 @@ private fun SubscribeButton(
     if (isSubscribed) {
         OutlinedButton(
             onClick = onSubscribe,
-            shape = RoundedCornerShape(BluejayTokens().radius.md),
+            // Expressive animated shape (matches ButtonWithAnimatedShapeSample):
+            // the default ButtonShapes morph on press.
+            shapes = ButtonDefaults.shapes(),
             modifier = Modifier.height(Tokens.ButtonSm),
             contentPadding = PaddingValues(horizontal = Tokens.SpaceLg),
         ) {
@@ -330,7 +333,9 @@ private fun SubscribeButton(
     } else {
         Button(
             onClick = onSubscribe,
-            shape = RoundedCornerShape(BluejayTokens().radius.md),
+            // Expressive animated shape (matches ButtonWithAnimatedShapeSample):
+            // the default ButtonShapes morph on press.
+            shapes = ButtonDefaults.shapes(),
             modifier = Modifier.height(Tokens.ButtonSm),
             contentPadding = PaddingValues(horizontal = Tokens.SpaceLg),
         ) {
