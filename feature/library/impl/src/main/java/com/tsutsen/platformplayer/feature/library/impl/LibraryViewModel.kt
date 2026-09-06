@@ -77,4 +77,11 @@ class LibraryViewModel
                 libraryRepository.deletePlaylist(playlistId)
             }
         }
+
+        /** Removes a video from watch history (options sheet, History strip). */
+        fun deleteFromHistory(url: String) {
+            viewModelScope.launch {
+                libraryRepository.deleteFromHistory(url)
+            }
+        }
     }

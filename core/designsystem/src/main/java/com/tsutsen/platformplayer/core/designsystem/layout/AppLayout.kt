@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +30,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.BottomAppBarDefaults
+import androidx.compose.material3.BottomAppBarState
+import androidx.compose.material3.FlexibleBottomAppBar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.layout.onSizeChanged
@@ -213,11 +218,12 @@ fun AppNavigationBar(
     onTabSelected: (String) -> Unit,
     labelAlpha: Float = 1f,
 ) {
-    // Plain Row hugging the items (M3's NavigationBar is fillMaxWidth
-    // internally, which would prevent the floating surface from wrapping it
-    // exactly). The surface is drawn by [NavigationBarSurface] in [AppLayout].
+    // NavigationBarItem is a RowScope extension in this M3 version, so the
+    // items live in a Row of their own; it fills the FlexibleBottomAppBar's
+    // full width and SpaceEvenly spreads the items edge to edge.
     Row(
-        modifier = Modifier,
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         items.forEach { item ->
@@ -280,13 +286,6 @@ private val NavSurfacePadH = Tokens.SpaceLg
 private val NavSurfacePadV = Tokens.SpaceMd
 
 /**
- * Vertical padding for the PORTRAIT bottom bar. Reduced from [NavSurfacePadV]
- * (the shared rail/card value) so the portrait bar is shorter. The portrait
- * bar is always a flat, full-width surface (no rounded floating card).
- */
-private val PortraitNavPadV = 4.dp
-
-/**
  * Corner radius that eases to 0 when [rounded] is false (edge flush with the
  * screen edge gets no rounding). The 300ms FastOutSlowIn spec matches the gap
  * animations exactly, so corners and size move in the same window — pass
@@ -303,51 +302,6 @@ private fun animatedCorner(rounded: Boolean, label: String): Dp =
         animationSpec = spatialSpec<Dp>(),
         label = label,
     ).value.coerceAtLeast(0.dp)
-
-/**
- * Surface behind the portrait bottom navigation bar.
- *
- * Always a flat, full-width rectangle — no rounded floating card in portrait
- * (this also means there are no corners to "restore" when the video closes).
- *
- * Native edge-to-edge: the background bleeds to the very bottom of the screen
- * (under the system gesture bar); only the CONTENT is inset by the system bar
- * inset. Insetting the whole bar (the old approach) left a gap at the bottom
- * where app content peeked through.
- */
-@Composable
-private fun NavigationBarSurface(
-    @Suppress("UNUSED_PARAMETER") navMorphed: Boolean,
-    content: @Composable () -> Unit,
-) {
-    val density = LocalDensity.current
-    val bottomInset = with(density) { WindowInsets.systemBars.getBottom(density).toDp() }
-
-    // Full-bleed background — the bar's bottom edge is the screen's bottom edge.
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainer),
-    ) {
-        // Inset only the content: horizontal card padding on the sides, the
-        // system bar inset (plus a little) below so the items clear the gesture bar.
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = NavSurfacePadH,
-                        end = NavSurfacePadH,
-                        top = PortraitNavPadV,
-                        bottom = bottomInset + PortraitNavPadV,
-                    ),
-            contentAlignment = Alignment.Center,
-        ) {
-            content()
-        }
-    }
-}
 
 /**
  * Surface behind the navigation rail. Normally a rounded card hugging the
@@ -577,19 +531,48 @@ fun AppLayout(
                 }
             }
         } else {
-            // Portrait: Content + NavigationBar at bottom
+            // Portrait: content + expressive bottom navigation bar.
+            //
+            // The bar is a FlexibleBottomAppBar driven by an exit-always
+            // scroll behavior: scroll the content up and the bar slides
+            // away, scroll down and it returns (it can also be dragged
+            // directly). The connection rides on the content Box, so any
+            // scrollable inside the screen content drives it (the Scaffold
+            // pattern).
+            val barVisible = config.showNavigation
+            // A fresh state + behavior each time the bar toggles so it
+            // always re-enters fully visible: a stale "collapsed" state
+            // from scrolling while the bar was gone (fullscreen) could
+            // otherwise strand it hidden.
+            val barState = remember(barVisible) { BottomAppBarState() }
+            val scrollBehavior =
+                BottomAppBarDefaults.exitAlwaysScrollBehavior(state = barState)
             Column(modifier = Modifier.fillMaxSize()) {
-                Box(modifier = Modifier.weight(1f).fillMaxSize().padding(top = topInset.coerceAtLeast(0.dp))) {
+                Box(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxSize()
+                            .padding(top = topInset.coerceAtLeast(0.dp))
+                            .nestedScroll(scrollBehavior.nestedScrollConnection),
+                ) {
                     content()
                 }
                 AnimatedVisibility(
-                    visible = config.showNavigation,
+                    visible = barVisible,
                     enter = fadeIn(animationSpec = effectsSpec<Float>()),
                     exit = fadeOut(animationSpec = effectsSpec<Float>()),
                 ) {
-                    NavigationBarSurface(navMorphed = navMorphed) {
-                        navigationContent()
-                    }
+                    FlexibleBottomAppBar(
+                        scrollBehavior = scrollBehavior,
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        contentPadding = PaddingValues(horizontal = 0.dp),
+                        // NavigationBarItems render at the 80dp "tall"
+                        // height; the flexible bar's own default (64dp)
+                        // would clip the labels.
+                        expandedHeight = 80.dp,
+                        content = { navigationContent() },
+                    )
                 }
             }
         }

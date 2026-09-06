@@ -11,19 +11,28 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -56,6 +65,7 @@ import kotlin.math.roundToInt
  * Per-frame values (video rect, alphas) flow through modifier lambdas, so the heavy
  * subtrees (details list, comments, live chat) never recompose on animation frames.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PlayerContent(
     player: ExoPlayer?,
@@ -94,6 +104,7 @@ fun PlayerContent(
     badgeState: com.tsutsen.platformplayer.feature.player.impl.GestureBadgeState,
     onBadgeSessionEnded: () -> Unit = {},
     scrubPositionMs: Long,
+    seekPreviewMs: Long? = null,
     subtitlesOn: Boolean,
     onSubtitleToggle: () -> Unit,
     onMinimize: () -> Unit,
@@ -114,7 +125,7 @@ fun PlayerContent(
     onFullscreenToggle: () -> Unit,
     onDetailsOverdragStart: () -> Unit = {},
     onDetailsOverdrag: (overdragPx: Float) -> Unit = {},
-    onDetailsOverdragEnd: (overdragPx: Float) -> Unit = {},
+    onDetailsOverdragEnd: (overdragPx: Float, velocityPxPerMs: Float) -> Unit = { _, _ -> },
 ) {
     val density = LocalDensity.current
 
@@ -158,6 +169,20 @@ fun PlayerContent(
     // Shared with PlayerControls, which measures the live bottom bar height
     // (the bar unmounts when hidden, but the last measured height stays).
     val bottomBarHeightPx = remember { mutableIntStateOf(0) }
+    // Pinch-to-zoom scale (default gesture, non-configurable) and pan offset
+    // in screen px (0f = centered). Reset on mode change below.
+    var zoomScale by remember { mutableFloatStateOf(1f) }
+    var zoomPanX by remember { mutableFloatStateOf(0f) }
+    var zoomPanY by remember { mutableFloatStateOf(0f) }
+    // Keep the pan inside the zoomed content: the scaled video extends
+    // (zoomScale - 1) * size / 2 past the fitted rect on each side.
+    fun clampZoomPan() {
+        val layout = surface.videoLayout(isLandscape, density)
+        val maxX = (zoomScale - 1f) * layout.widthPx / 2f
+        val maxY = (zoomScale - 1f) * layout.heightPx / 2f
+        zoomPanX = zoomPanX.coerceIn(-maxX, maxX)
+        zoomPanY = zoomPanY.coerceIn(-maxY, maxY)
+    }
     // Subtitles respect the controls: when the bottom bar pops up, the
     // captions slide up above it (and back down with it) on the same 200ms
     // curve the bars use, so text and bar move as one.
@@ -180,26 +205,30 @@ fun PlayerContent(
             surface.isCollapsedNow(isLandscape),
         )
     // The details panel's first layout is heavy (comments, recommendations,
-    // live chat). Composition policy:
-    // - Normal: composed whenever its alpha is above the invisible
-    //   threshold. A cancelled settle back to normal keeps it (it is
-    //   already composed — dropping it mid-fade would pop the panel).
-    // - Fullscreen: composed while its alpha is visible AND through the
-    //   expand settle (isSettlingFullscreen): the alpha is 0 by then, so
-    //   nothing draws, and the heavy unmount lands on the still frame
-    //   after the settle instead of mid-motion at fsP 0.99.
-    // First-time composition (remount) still goes through the time-based
-    // fade-in below.
-    val isFullscreenNow = state.isFullscreen
-    val detailsVisible by remember(surface, isLandscape, isFullscreenNow) {
+    // live chat), so its compose/uncompose must land on a STILL frame,
+    // never mid-motion. A pure "alpha > threshold" gate mounted partway
+    // through the floating->normal morph and unmounted partway through the
+    // fullscreen morph — a visible frame-drop / pop. Use hysteresis instead:
+    // - not composed: compose only when visible AND the morph/fullscreen
+    //   axes are at rest, so the heavy first mount lands after the motion
+    //   settles (the 300 ms fade-in below covers its appearance);
+    // - composed: stay composed while visible OR while the axes are moving,
+    //   so the panel fades smoothly (no pop) and the unmount lands on the
+    //   still frame at rest, not mid-motion at fsP/mP ~0.4.
+    val detailsComposed = remember(surface) { mutableStateOf(false) }
+    val detailsVisible by remember(surface, isLandscape) {
         derivedStateOf {
-            if (isFullscreenNow) {
-                surface.isSettlingFullscreen.value ||
-                    surface.detailsAlphaNow(isLandscape) > 0.01f
-            } else {
-                surface.detailsAlphaNow(isLandscape) > 0.01f
-            }
+            val visible = surface.detailsAlphaNow(isLandscape) > 0.01f
+            val moving = surface.isAnyAxisMoving()
+            if (detailsComposed.value) visible || moving else visible && !moving
         }
+    }
+    LaunchedEffect(detailsVisible) { detailsComposed.value = detailsVisible }
+    // Reset the pinch zoom whenever the player changes mode.
+    LaunchedEffect(state.isFullscreen, state.isMinimized) {
+        zoomScale = 1f
+        zoomPanX = 0f
+        zoomPanY = 0f
     }
     // Time-based fade-IN: the p-based alpha window (0.1-0.4) is traversed in
     // only ~90ms of the 300ms click-to-expand tween, so the details would
@@ -227,7 +256,19 @@ fun PlayerContent(
         // in PlayerView — it follows the video box through the morph and
         // lands exactly on the mini rect, so no separate scrim is needed
         // here.
-        PlayerVideoSurface(player = player, modifier = Modifier.then(videoModifier))
+        PlayerVideoSurface(
+            player = player,
+            modifier =
+                videoModifier.graphicsLayer {
+                    scaleX = zoomScale
+                    scaleY = zoomScale
+                    // graphicsLayer applies translation AFTER the scale
+                    // (around the pivot), so translationX/Y are already in
+                    // screen px — set them directly for 1:1 finger tracking.
+                    translationX = zoomPanX
+                    translationY = zoomPanY
+                },
+        )
 
         // ==================== 1b. Subtitle overlay ====================
         // Rendered inside the video's offset/size space (clipped with it) so
@@ -313,10 +354,31 @@ fun PlayerContent(
             handler = gestureHandler,
             isScrubbing = isScrubbing,
             onTap = onTap,
+            // Pinch-to-zoom (default, non-configurable): the gesture system
+            // recognises the second pointer inside its own loop and reports
+            // an incremental scale per move (1.0 = no change). The video
+            // surface carries the resulting scale (graphicsLayer above).
+            // This must NOT be a separate detectTransformGestures layer on
+            // top: in foundation 1.12.0-beta01 that detector tracks the
+            // single-pointer centroid as pan and consumes every move past
+            // touch slop, starving all single-finger gestures on the video.
+            onPinchScale = { scale ->
+                zoomScale = (zoomScale * scale).coerceIn(1f, 3f)
+                clampZoomPan()
+            },
+            // While zoomed in, single-finger drags (and the pinch centroid)
+            // pan the zoom window with screen-px deltas; the surface above
+            // carries the accumulated (clamped) offset.
+            onZoomPan = { dx, dy ->
+                zoomPanX += dx
+                zoomPanY += dy
+                clampZoomPan()
+            },
+            zoomActive = { zoomScale > 1f },
             // Floating mode
             onOffsetChanged = onMiniOffsetChanged,
             onExpand = onExpand,
-        )
+            )
 
         // ==================== 3. Details panel (LazyColumn) ====================
         // Rendered on top of the gesture layer so the LazyColumn can receive scroll
@@ -396,7 +458,6 @@ fun PlayerContent(
             surface = surface,
             isLandscape = isLandscape,
             controlsVisible = controlsVisible,
-            isLoading = isLoading,
             activeProgressIndicator = activeProgressIndicator,
             badgeState = badgeState,
             onBadgeSessionEnded = onBadgeSessionEnded,
@@ -405,6 +466,7 @@ fun PlayerContent(
             subtitlesOn = subtitlesOn,
             isScrubbing = isScrubbing,
             scrubPositionMs = scrubPositionMs,
+            seekPreviewMs = seekPreviewMs,
             onSubtitleToggle = onSubtitleToggle,
             onPlayPause = onPlayPause,
             onPrevious = onPrevious,
@@ -423,6 +485,24 @@ fun PlayerContent(
             onSeek = onSeek,
             onScrubFinished = onScrubFinished,
             bottomBarHeightPx = bottomBarHeightPx,
-        )
+            )
+
+        // ==================== 5. Loading indicator (independent of controls) ====================
+        // Its own top layer so a buffering spinner stays visible while the
+        // control bars fade out — it must not hide with the controls.
+        // Gated on !isMinimized: FLOATING has its own compact row and no
+        // center spinner (the box is too small to host one).
+        if (isLoading && !state.isMinimized) {
+            Box(
+                modifier = videoModifier,
+                contentAlignment = Alignment.Center,
+            ) {
+                ContainedLoadingIndicator(
+                    modifier = Modifier.size(48.dp),
+                    containerColor = Color.Black.copy(alpha = 0.35f),
+                    indicatorColor = Color.White,
+                )
+            }
+        }
     }
 }

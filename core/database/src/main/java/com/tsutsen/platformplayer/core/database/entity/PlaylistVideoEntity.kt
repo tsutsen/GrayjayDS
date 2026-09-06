@@ -36,4 +36,6 @@ data class PlaylistVideoEntity(
     val durationMs: Long = 0,
     val authorUrl: String? = null,
     val viewCount: Long = 0,
+    /** The video's real posted date, captured at save time (0 = unknown). */
+    val postedAt: Long = 0,
 )

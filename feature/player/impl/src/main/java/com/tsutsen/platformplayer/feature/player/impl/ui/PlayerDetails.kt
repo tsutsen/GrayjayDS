@@ -76,11 +76,13 @@ internal fun PlayerDetails(
      * Overdrag morph: while the list is pinned at the top, further
      * downward drags are reported live ([onOverdrag] with the cumulative px)
      * so the parent can morph toward fullscreen. [onOverdragEnd] receives
-     * the final total (0f when the drag was cancelled or scrolled away).
+     * the final total (0f when the drag was cancelled or scrolled away) and
+     * the release velocity (px/ms, downward-positive) for a momentum
+     * settle.
      */
     onOverdragStart: () -> Unit = {},
     onOverdrag: (overdragPx: Float) -> Unit = {},
-    onOverdragEnd: (overdragPx: Float) -> Unit = {},
+    onOverdragEnd: (overdragPx: Float, velocityPxPerMs: Float) -> Unit = { _, _ -> },
 ) {
     val density = LocalDensity.current
     val systemBottomInset = with(density) { WindowInsets.systemBars.getBottom(density).toDp() }
@@ -113,52 +115,88 @@ internal fun PlayerDetails(
                     // it is pinned at the top.
                     var topOverscrollPx = 0f
                     var overscrollActive = false
+                    // Last two accumulation samples (ms, px) → the release
+                    // velocity; one frame stale, same as the morph drag axes.
+                    var sampleT = 0L
+                    var samplePx = 0f
+                    var sampleV = 0f
+                    var hasSample = false
+
+                    fun sampleOverdragVelocity() {
+                        val t = System.currentTimeMillis()
+                        if (hasSample) {
+                            sampleV =
+                                (topOverscrollPx - samplePx) /
+                                    maxOf(1L, t - sampleT).toFloat()
+                            samplePx = topOverscrollPx
+                            sampleT = t
+                        } else {
+                            samplePx = topOverscrollPx
+                            sampleT = t
+                            sampleV = 0f
+                            hasSample = true
+                        }
+                    }
 
                     fun endOverscroll(totalPx: Float) {
                         if (!overscrollActive) return
                         overscrollActive = false
-                        onOverdragEnd(totalPx)
+                        onOverdragEnd(totalPx, if (hasSample) sampleV else 0f)
                     }
 
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         topOverscrollPx = 0f
                         overscrollActive = false
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change =
-                                event.changes.firstOrNull { it.id == down.id }
-                                    ?: continue
-                            if (!change.pressed) {
-                                endOverscroll(topOverscrollPx)
-                                break
-                            }
-                            val amount = change.position - change.previousPosition
-                            when {
-                                // List scrolled away from the top: abandon.
-                                scrollState.canScrollBackward -> {
-                                    topOverscrollPx = 0f
-                                    endOverscroll(0f)
+                        hasSample = false
+                        sampleV = 0f
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change =
+                                    event.changes.firstOrNull { it.id == down.id }
+                                        ?: continue
+                                if (!change.pressed) {
+                                    endOverscroll(topOverscrollPx)
+                                    break
                                 }
-
-                                // Dragging down while pinned at the top:
-                                // accumulate.
-                                amount.y > 0f -> {
-                                    topOverscrollPx += amount.y
-                                    if (!overscrollActive) {
-                                        overscrollActive = true
-                                        onOverdragStart()
+                                val amount = change.position - change.previousPosition
+                                when {
+                                    // List scrolled away from the top: abandon.
+                                    scrollState.canScrollBackward -> {
+                                        topOverscrollPx = 0f
+                                        endOverscroll(0f)
                                     }
-                                    onOverdrag(topOverscrollPx)
-                                }
 
-                                // Dragging up: the list will scroll away —
-                                // abandon.
-                                amount.y < 0f -> {
-                                    topOverscrollPx = 0f
-                                    endOverscroll(0f)
+                                    // Dragging down while pinned at the top:
+                                    // accumulate.
+                                    amount.y > 0f -> {
+                                        topOverscrollPx += amount.y
+                                        sampleOverdragVelocity()
+                                        if (!overscrollActive) {
+                                            overscrollActive = true
+                                            onOverdragStart()
+                                        }
+                                        onOverdrag(topOverscrollPx)
+                                    }
+
+                                    // Dragging up: the list will scroll away —
+                                    // abandon.
+                                    amount.y < 0f -> {
+                                        topOverscrollPx = 0f
+                                        endOverscroll(0f)
+                                    }
                                 }
                             }
+                        } finally {
+                            // This subtree can unmount MID-gesture: past the
+                            // details fade threshold (fullscreenProgress ~0.9)
+                            // detailsVisible flips and drops PlayerDetails
+                            // while the finger is still down. Without this,
+                            // onOverdragEnd never fires, isDraggingFullscreen
+                            // stays true, and the axis is stranded mid-morph
+                            // with no settle path (the stuck-mid-morph state).
+                            endOverscroll(topOverscrollPx)
                         }
                     }
                 },

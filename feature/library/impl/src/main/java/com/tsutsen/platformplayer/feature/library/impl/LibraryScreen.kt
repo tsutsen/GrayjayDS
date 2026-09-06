@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.tsutsen.platformplayer.core.data.repository.impl.LibraryRepositoryImpl
 import com.tsutsen.platformplayer.core.designsystem.component.ContainerLayout
 import com.tsutsen.platformplayer.core.designsystem.component.PlaylistOptionsSheet
 import com.tsutsen.platformplayer.core.designsystem.component.VideoContainer
@@ -73,6 +74,9 @@ fun LibraryScreen(
 ) {
     val sections by viewModel.sections.collectAsState()
     var optionsCard by remember { mutableStateOf<CoreVideoCard?>(null) }
+    // The section the card was long-pressed in: the "Remove from history"
+    // tile only appears for the History section.
+    var optionsSectionId by remember { mutableStateOf<String?>(null) }
     var optionsPlaylist by remember { mutableStateOf<PlaylistCard?>(null) }
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
 
@@ -103,7 +107,10 @@ fun LibraryScreen(
                                 else -> Unit
                             }
                         },
-                        onVideoLongClick = { optionsCard = it },
+                        onVideoLongClick = { card ->
+                            optionsCard = card
+                            optionsSectionId = section.id
+                        },
                         onPlaylistLongClick = { optionsPlaylist = it },
                         // "playlists" is the LibraryRepositoryImpl.PLAYLISTS_ID
                         // section constant.
@@ -120,6 +127,12 @@ fun LibraryScreen(
             onDismiss = { optionsCard = null },
             onPlay = { playerViewModel.play(card) },
             onGoToChannel = { navigator.navigateToChannel(it) },
+            onRemoveFromHistory =
+                if (optionsSectionId == LibraryRepositoryImpl.HISTORY_ID) {
+                    { viewModel.deleteFromHistory(card.url) }
+                } else {
+                    null
+                },
         )
     }
 
@@ -239,21 +252,62 @@ private fun AllCard(
     count: Int,
     onClick: () -> Unit,
 ) {
-    Box(
+    // Mirrors VideoCard's layout (16:9 cover + a title/meta text area) so it
+    // lines up with the real strip cards' height without any fixed height —
+    // the cover keeps its aspect ratio and the text area reserves the same
+    // line heights the cards use (2-line title + 1-line meta).
+    Card(
         modifier =
             Modifier
                 .width(STRIP_CARD_WIDTH)
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(BluejayTokens().radius.sm))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+        shape = RoundedCornerShape(BluejayTokens().radius.sm),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
     ) {
-        Text(
-            text = "All ($count)",
-            fontWeight = FontWeight.SemiBold,
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "All",
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+            Column(
+                modifier =
+                    Modifier
+                        .padding(Tokens.SpaceMd)
+                        .fillMaxWidth(),
+            ) {
+                Text(
+                    text = "$count",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    minLines = 2,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "videos",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }
 

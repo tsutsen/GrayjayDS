@@ -1,11 +1,12 @@
 package com.tsutsen.platformplayer.activities
 
 import android.Manifest
-import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.util.DisplayMetrics
+import android.util.Log
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
@@ -14,10 +15,13 @@ import android.view.Display
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResult
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.rememberCoroutineScope
@@ -28,6 +32,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
+import androidx.core.pip.PictureInPictureDelegate
+import androidx.core.pip.VideoPlaybackPictureInPicture
 import androidx.lifecycle.lifecycleScope
 import com.tsutsen.platformplayer.compose.BluejayNavGraph
 import com.tsutsen.platformplayer.gettingstarted.GettingStartedFlow
@@ -45,6 +52,7 @@ import com.tsutsen.platformplayer.core.designsystem.theme.BluejayTheme
 import com.tsutsen.platformplayer.core.designsystem.theme.ThemeEngine
 import com.tsutsen.platformplayer.core.navigation.NavDestination
 import com.tsutsen.platformplayer.core.navigation.Navigator
+import com.tsutsen.platformplayer.feature.player.impl.PipSurface
 import com.tsutsen.platformplayer.feature.player.impl.PlayerView
 import com.tsutsen.platformplayer.feature.player.impl.SystemControls
 import com.tsutsen.platformplayer.states.StateApp
@@ -52,8 +60,8 @@ import com.tsutsen.platformplayer.states.StateCasting
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -100,6 +108,9 @@ class MainActivity :
     @Inject
     lateinit var subscriptionDao: com.tsutsen.platformplayer.core.database.dao.SubscriptionDao
 
+    /** Jetpack PiP delegate (androidx.core:core-pip), used canonically below. */
+    private lateinit var pip: VideoPlaybackPictureInPicture
+
     /** System picture-in-picture active (video-only window). */
     internal val pipActive = MutableStateFlow(false)
 
@@ -132,8 +143,32 @@ class MainActivity :
 
     private var _pendingResultHandler: ((ActivityResult) -> Unit)? = null
 
+    /** TEMPORARY PiP debug probe - remove once the lifecycle map is settled. */
+    private fun pipLog(tag: String) {
+        Log.d(
+            "BJPIP",
+            "$tag: inPip=$isInPictureInPictureMode pipActive=${pipActive.value} " +
+                "state=${lifecycle.currentState} playing=${playerRepository.playerState.value.isPlaying}",
+        )
+    }
+
+    override fun onRestart() {
+        super.onRestart()
+        pipLog("onRestart")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        pipLog("onPause")
+    }
+
     override fun onStart() {
         super.onStart()
+        pipLog("onStart")
+        // PiP UI state is deliberately NOT synced here: onStart fires
+        // mid-expansion while the window size is still settling. The flip
+        // happens in onResume, when the window is final, so the surface
+        // swap never happens mid-transition.
         // Re-assert the dual-screen setting on every return to the
         // foreground. The rear display can still be in its wake/return
         // transition when onStart fires (STATE_OFF), so retry a couple of
@@ -150,6 +185,13 @@ class MainActivity :
 
     internal fun ensureCompanion() {
         if (isFinishing || isDestroyed) return
+        // Never churn the companion window during a PiP transition:
+        // dismiss/re-show races the system's PiP window reconfiguration
+        // (WM input-channel disposal errors) and leaves the task in a
+        // state the launcher can no longer bring forward.
+        // Gate on our own state, not the system flag (which can stick
+        // true after a jammed close — see onResume's self-heal).
+        if (pipActive.value) return
         val enabled = settingsRepository.preferences.value.dualScreen
         val display = rearDisplay()
         if (!enabled || display == null) {
@@ -194,6 +236,30 @@ class MainActivity :
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        pipLog("onResume")
+        // Self-heal: if modeChanged(false) was dropped and pipActive stuck
+        // true, a fullscreen-sized window proves we're out of PiP — trust
+        // the window, clear the state, no relaunch.
+        if (pipActive.value && !windowIsPipSized()) {
+            pipLog("clearing stuck pip state (window is fullscreen-sized)")
+            pipActive.value = false
+            ensureCompanion()
+        }
+    }
+
+    /** True while our window is the small PiP window (vs a full app window). */
+    private fun windowIsPipSized(): Boolean {
+        if (Build.VERSION.SDK_INT < 30) return pipActive.value
+        val wm = windowManager.currentWindowMetrics.bounds
+        val real = DisplayMetrics()
+        (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager)
+            .getDisplay(Display.DEFAULT_DISPLAY)
+            .getRealMetrics(real)
+        return wm.width() < real.widthPixels * 0.8f || wm.height() < real.heightPixels * 0.8f
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         // When returning from the lock screen the displays are still in their
@@ -204,24 +270,13 @@ class MainActivity :
 
     /**
      * System picture-in-picture: leaving the app (home) while a video is
-     * playing moves playback into the floating PiP window instead of just
-     * minimizing the app.
+     * playing moves playback into the floating PiP window. Entry is owned
+     * by the Jetpack PiP delegate: auto-enter (setEnabled, API 31+) on
+     * modern systems, its manual enterPictureInPictureMode on older ones.
      */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (pipActive.value) return
-        val st = playerRepository.playerState.value
-        if (st.currentVideo == null || !st.isPlaying || st.isCasting) return
-        val builder = PictureInPictureParams.Builder()
-        playerRepository.exoPlayer?.videoSize?.let { size ->
-            if (size.width > 0 && size.height > 0) {
-                // Deprecated API 33+ (Rational form) — the only overload
-                // visible to this SDK stub; behaves identically on 36.
-                @Suppress("DEPRECATION")
-                builder.setAspectRatio(Rational(size.width, size.height))
-            }
-        }
-        enterPictureInPictureMode(builder.build())
+        pipLog("onUserLeaveHint")
     }
 
     override fun onPictureInPictureModeChanged(
@@ -229,15 +284,31 @@ class MainActivity :
         newConfig: Configuration,
     ) {
         super.onPictureInPictureModeChanged(isInPipMode, newConfig)
+        pipLog("modeChanged($isInPipMode)")
         pipActive.value = isInPipMode
+        if (!isInPipMode) {
+            // PiP closed: pause so the video doesn't keep playing after
+            // its window is gone.
+            if (playerRepository.playerState.value.isPlaying) {
+                lifecycleScope.launch { playerRepository.pause() }
+            }
+        }
     }
 
     override fun onStop() {
         super.onStop()
+        pipLog("onStop")
         // The companion only makes sense while the app is in the
         // foreground — dismiss on minimize. onStart() re-asserts it.
         companionPresentation?.dismiss()
         companionPresentation = null
+        // Stopped while OUT of PiP: pause so the video doesn't keep
+        // playing invisibly. Auto-enter PiP also stops the activity on
+        // entry, but modeChanged(true) has set pipActive by then, so the
+        // gate holds; closing the PiP pauses via modeChanged(false).
+        if (!pipActive.value && playerRepository.playerState.value.isPlaying) {
+            lifecycleScope.launch { playerRepository.pause() }
+        }
         // Paired with the (deferred) casting start below — restore both
         // together when re-enabling casting.
         // StateCasting.instance.onStop()
@@ -246,6 +317,8 @@ class MainActivity :
     override fun onDestroy() {
         companionPresentation?.dismiss()
         companionPresentation = null
+        PipSurface.surfaceView.value = null
+        pip.close()
         super.onDestroy()
     }
 
@@ -276,6 +349,64 @@ class MainActivity :
         // Initialize StateApp and FragmentedStorage before setting content
         StateApp.instance.setGlobalContext(this, lifecycleScope, "compose")
         StateApp.instance.mainAppStarting(this)
+        pipLog("onCreate")
+
+        // Jetpack PiP (androidx.core:core-pip), used canonically: the
+        // delegate owns the platform callbacks and the official helper
+        // methods push validated params (aspect clamped to
+        // 100:239..239:100, sourceRectHint center-cropped to the aspect).
+        pip = VideoPlaybackPictureInPicture(this)
+        // Double-tap "Picture in picture" gesture routes here. This alpha delegate
+        // has no enter(), so use the platform API (mode-change still hits onPictureInPictureModeChanged).
+        PipSurface.enterPip = {
+            enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().build())
+        }
+        pip.addOnPictureInPictureEventListener(
+            ContextCompat.getMainExecutor(this),
+            object : PictureInPictureDelegate.OnPictureInPictureEventListener {
+                override fun onPictureInPictureEvent(
+                    event: PictureInPictureDelegate.Event,
+                    config: Configuration?,
+                ) {
+                    pipLog("event $event")
+                }
+            },
+        )
+
+        // setEnabled drives auto-enter (API 31+): only while a video is
+        // actually playing locally. distinctUntilChanged matters — the
+        // library pushes params on every call, and playerState ticks 10/s.
+        lifecycleScope.launch {
+            playerRepository.playerState
+                .map { it.isPlaying && !it.isCasting && it.currentVideo != null }
+                .distinctUntilChanged()
+                .collect { pip.setEnabled(it) }
+        }
+
+        // setAspectRatio tracks the video size (enter/exit crop).
+        lifecycleScope.launch {
+            playerRepository.playerState
+                .map {
+                    val size = playerRepository.exoPlayer?.videoSize
+                    if (size != null && size.width > 0 && size.height > 0) {
+                        Rational(size.width, size.height)
+                    } else null
+                }
+                .filterNotNull()
+                .distinctUntilChanged()
+                .collect { pip.setAspectRatio(it) }
+        }
+
+        // setPlayerView: the delegate tracks this view's bounds as the
+        // sourceRectHint (the branch swap means it follows whichever
+        // surface mode is composed — video card in the app tree, full
+        // window in the PiP tree).
+        lifecycleScope.launch {
+            PipSurface.surfaceView
+                .filterNotNull()
+                .distinctUntilChanged()
+                .collect { pip.setPlayerView(it) }
+        }
 
         // Casting deferred: fcast only reaches fcast-receiver apps (not
         // Chromecast TVs), which is niche — users can use system screen cast.

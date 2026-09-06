@@ -25,6 +25,12 @@ data class VideoCard(
     val durationMs: Long? = null,
     val viewCount: Long? = null,
     val publishedAt: Long? = null,
+    /**
+     * When the card was added to a library section (watch later, history,
+     * playlist...); null for non-library cards. Drives the "added X ago"
+     * thumbnail badge, separate from [publishedAt] (the real posted date).
+     */
+    val addedAt: Long? = null,
     val url: String,
     /** Live stream — draws the red LIVE badge (elapsed time from publishedAt) on the thumbnail. */
     val isLive: Boolean = false,

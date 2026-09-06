@@ -186,22 +186,34 @@ fun PlaylistCardView(
                         .padding(12.dp)
                         .fillMaxWidth(),
             ) {
+                // minLines=2: every card reserves two title lines, so the
+                // text area (and thus the card) has one height regardless of
+                // how long the title is.
                 Text(
                     text = card.title,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
+                    minLines = 2,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                if (card.videoCount != null) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "${card.videoCount} videos",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                // The count line is ALWAYS rendered (line space reserved via
+                // the empty text) so no card is shorter than another. The
+                // count itself only shows when the source reports one — a
+                // null count means "unknown", not zero, so nothing is
+                // fabricated.
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text =
+                        card.videoCount?.let { count ->
+                            "$count ${if (count == 1) "video" else "videos"}"
+                        }
+                        ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
             }
         }
     }

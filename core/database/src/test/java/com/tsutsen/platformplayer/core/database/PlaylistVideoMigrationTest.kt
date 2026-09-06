@@ -71,6 +71,7 @@ class PlaylistVideoMigrationTest {
         AppDatabase.MIGRATION_2_3.migrate(writable)
         writable.execSQL("ALTER TABLE `playlist_videos` ADD COLUMN `authorUrl` TEXT")
         writable.execSQL("ALTER TABLE `playlist_videos` ADD COLUMN `viewCount` INTEGER NOT NULL DEFAULT 0")
+        writable.execSQL("ALTER TABLE `playlist_videos` ADD COLUMN `postedAt` INTEGER NOT NULL DEFAULT 0")
         writable.execSQL("PRAGMA user_version = 7")
     }
 

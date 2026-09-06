@@ -24,8 +24,6 @@ import com.tsutsen.platformplayer.readBytes
 import com.tsutsen.platformplayer.stores.FragmentedStorage
 import com.tsutsen.platformplayer.stores.v2.ManagedStore
 import com.tsutsen.platformplayer.writeBytes
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -353,8 +351,8 @@ class StateBackup {
             }
             try {
                 val history = StateHistory.instance.getRecentHistory(OffsetDateTime.MIN, 2000);
-                historyVideos = history.map { it.video };
-                storesToSave.set("history", history.map { it.toReconString() });
+                historyVideos = history.map { StateHistory.instance.toWireHistory(it).video };
+                storesToSave.set("history", history.map { StateHistory.instance.toReconString(it) });
             }
             catch(ex: Throwable) {
                 Logger.e(TAG, "Failed to serialize history");
@@ -465,9 +463,7 @@ class StateBackup {
                                                                 for (historyStr in store.value) {
                                                                     try {
                                                                         val histObj = HistoryVideo.fromReconString(historyStr) { url -> return@fromReconString export.cache?.videos?.firstOrNull { it.url == url }; }
-                                                                        val hist = StateHistory.instance.getHistoryByVideo(histObj.video, true, histObj.date);
-                                                                        if (hist != null)
-                                                                            StateHistory.instance.updateHistoryPosition(histObj.video, hist, true, histObj.position, histObj.date, false, histObj.playlistId);
+                                                                        StateHistory.instance.importHistoryVideos(listOf(histObj));
                                                                     } catch (ex: Throwable) {
                                                                         Logger.e(TAG, "Failed to import subscription group", ex);
                                                                     }
@@ -585,36 +581,6 @@ class StateBackup {
                 UIDialogs.showGeneralErrorDialog(context, "Unknown text header [${text}]");
             }
             return false;
-        }
-        fun importNewPipeSubs(context: MainActivity, json: String) {
-            val newPipeSubsParsed = JsonParser.parseString(json).asJsonObject;
-            if (!newPipeSubsParsed.has("subscriptions") || !newPipeSubsParsed["subscriptions"].isJsonArray)
-                UIDialogs.showGeneralErrorDialog(context, "Invalid json");
-            else {
-                importNewPipeSubs(context, newPipeSubsParsed);
-            }
-        }
-        fun importNewPipeSubs(context: MainActivity, obj: JsonObject) {
-            try {
-                val jsonSubs = obj["subscriptions"]
-                val jsonSubsArray = jsonSubs.asJsonArray;
-                val jsonSubsArrayItt = jsonSubsArray.iterator();
-                val subs = mutableListOf<String>()
-                while(jsonSubsArrayItt.hasNext()) {
-                    val jsonSubObj = jsonSubsArrayItt.next().asJsonObject;
-
-                    if(jsonSubObj.has("url"))
-                        subs.add(jsonSubObj["url"].asString);
-                }
-
-                // ImportSubscriptionsFragment removed - Compose ImportSubscriptions screen handles this
-                Logger.i(TAG, "Importing ${subs.size} subscriptions via Compose screen");
-                UIDialogs.toast(context, "Import ${subs.size} subscriptions (Compose screen not yet wired)");
-            }
-            catch(ex: Exception) {
-                Logger.e("StateBackup", ex.message, ex);
-                UIDialogs.showGeneralErrorDialog(context, context.getString(R.string.failed_to_parse_newpipe_subscriptions), ex);
-            }
         }
     }
 

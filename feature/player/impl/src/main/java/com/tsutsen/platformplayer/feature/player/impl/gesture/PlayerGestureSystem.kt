@@ -16,6 +16,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -23,7 +25,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
+import kotlin.math.hypot
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -80,6 +84,16 @@ fun PlayerGestureSystem(
     handler: GestureActionHandler,
     isScrubbing: Boolean,
     onTap: () -> Unit,
+    // Pinch-to-zoom (non-floating mode only): called with an incremental
+    // scale factor (1.0 = no change) on every pinch move while two
+    // pointers are down. The caller owns the accumulated scale.
+    onPinchScale: (Float) -> Unit = {},
+    // Zoom-pan (non-floating mode only): while the video is zoomed in, single-finger
+    // drags pan the zoom window instead of the sector action. Called with per-move
+    // SCREEN-px deltas; the caller accumulates and clamps the offset.
+    onZoomPan: (Float, Float) -> Unit = { _, _ -> },
+    // Read at gesture start: true while the video is zoomed in.
+    zoomActive: () -> Boolean = { false },
     // Floating-mode drag params (only used when overlayMode == FLOATING)
     onOffsetChanged: (Float, Float) -> Unit = { _, _ -> },
     onExpand: () -> Unit = {},
@@ -97,6 +111,9 @@ fun PlayerGestureSystem(
     val currentOverlayMode by rememberUpdatedState(overlayMode)
     val currentIsScrubbing by rememberUpdatedState(isScrubbing)
     val currentOnTap by rememberUpdatedState(onTap)
+    val currentOnPinchScale by rememberUpdatedState(onPinchScale)
+    val currentOnZoomPan by rememberUpdatedState(onZoomPan)
+    val currentZoomActive by rememberUpdatedState(zoomActive)
     val currentOnExpand by rememberUpdatedState(onExpand)
     val currentOnOffsetChanged by rememberUpdatedState(onOffsetChanged)
     val currentDoubleTapSlopPx by rememberUpdatedState(with(density) { DOUBLE_TAP_SLOP_DP.dp.toPx() })
@@ -255,18 +272,164 @@ fun PlayerGestureSystem(
                                 // every move/release, drives hold modulation, ends
                                 // the hold (onUp / cancel), and defers the tap when
                                 // nothing fired.
-                                val holdWatchdog = scope.launch {
-                                    delay(PlayerGestureRecognizer.HOLD_TIMEOUT_MS)
-                                    recognizer.onHoldTimeout(System.currentTimeMillis())
-                                        ?.let {
-                                            Log.d("GESTURE", "HOLD fired: sector=${it.sector} action=${it.action}")
-                                            currentHandler.handleGestureFrame(it)
+                                // Zoom-pan mode: while the video is zoomed in, a
+                                // single-finger drag past the swipe threshold pans the
+                                // zoom window instead of the sector action, and the
+                                // hold is suppressed (the finger is positioning the
+                                // view, not scrubbing or changing speed). A tap with
+                                // no movement still falls through to the recognizer's
+                                // deferred-tap path below.
+                                val zoomPanMode = currentZoomActive()
+                                val holdWatchdog: Job? =
+                                    if (zoomPanMode) {
+                                        null
+                                    } else {
+                                        scope.launch {
+                                            delay(PlayerGestureRecognizer.HOLD_TIMEOUT_MS)
+                                            recognizer.onHoldTimeout(System.currentTimeMillis())
+                                                ?.let {
+                                                    Log.d("GESTURE", "HOLD fired: sector=${it.sector} action=${it.action}")
+                                                    currentHandler.handleGestureFrame(it)
+                                                }
                                         }
-                                }
+                                    }
                                 try {
                                     var slide: PlayerGestureRecognizer.MoveResult.SlideStart? = null
+                                    // Pinch state: set when a second pointer lands
+                                    // while the first is down. The gesture becomes
+                                    // a pinch-to-zoom from that moment on.
+                                    var pinchSecondId: PointerId? = null
+                                    var pinchPrevDist = 0f
+                                    // Zoom-pan state (used when zoomPanMode): the last
+                                    // position deltas were measured from, the
+                                    // accumulated drag distance (slop detection), and
+                                    // whether the pan has been activated.
+                                    var panLastX = downPos.x
+                                    var panLastY = downPos.y
+                                    var panTotalX = 0f
+                                    var panTotalY = 0f
+                                    var panStarted = false
+                                    // Two-finger centroid for zoom-panning during a
+                                    // pinch (only tracked while zoomed in).
+                                    var pinchPrevCx = 0f
+                                    var pinchPrevCy = 0f
+                                    var pinchHasPrevCentroid = false
                                     while (true) {
                                         val event = awaitPointerEvent()
+
+                                        // ---- 2a. Pinch: a second pointer has landed ----
+                                        //
+                                        // The pinch lives in this loop instead of a
+                                        // separate detectTransformGestures layer
+                                        // above it: that detector (foundation
+                                        // 1.12.0-beta01) tracks the centroid of
+                                        // EVERY pressed pointer as pan and, once a
+                                        // single finger drifts past touch slop,
+                                        // consumes all later events — starving
+                                        // every single-finger gesture below it.
+                                        // Here a second pointer is only ever
+                                        // interesting while the first is down, and
+                                        // it consumes nothing before that moment.
+                                        if (pinchSecondId == null) {
+                                            val second =
+                                                event.changes.firstOrNull { it.id != pointerId && it.pressed }
+                                            if (second != null) {
+                                                pinchSecondId = second.id
+                                                // The single-finger decision is
+                                                // over: kill the hold watchdog and
+                                                // flush the hold/slide END frame
+                                                // (if a hold already fired) so
+                                                // nothing sticks.
+                                                holdWatchdog?.cancel()
+                                                recognizer.cancel(System.currentTimeMillis())
+                                                    ?.let {
+                                                        currentHandler.handleGestureFrame(it)
+                                                    }
+                                                val first = event.changes.firstOrNull { it.id == pointerId }
+                                                if (first != null && first.pressed) {
+                                                    pinchPrevDist = pointerDistance(first, second)
+                                                }
+                                            }
+                                        }
+                                        if (pinchSecondId != null) {
+                                            // The pinch owns every pointer of this
+                                            // gesture from here on — consume all
+                                            // changes (including the first
+                                            // finger's up, so it can never be
+                                            // mistaken for a tap).
+                                            event.changes.forEach { it.consume() }
+                                            val first = event.changes.firstOrNull { it.id == pointerId }
+                                            val second = event.changes.firstOrNull { it.id == pinchSecondId }
+                                            if (first != null && second != null &&
+                                                first.pressed && second.pressed
+                                            ) {
+                                                val dist = pointerDistance(first, second)
+                                                if (dist > 0f && pinchPrevDist > 0f) {
+                                                    currentOnPinchScale(dist / pinchPrevDist)
+                                                }
+                                                pinchPrevDist = dist
+                                                // While zoomed in, two-finger drags also pan the
+                                                // window: track the centroid motion alongside
+                                                // the pinch scale.
+                                                if (currentZoomActive()) {
+                                                    val cx = (first.position.x + second.position.x) / 2f
+                                                    val cy = (first.position.y + second.position.y) / 2f
+                                                    if (pinchHasPrevCentroid) {
+                                                        currentOnZoomPan(cx - pinchPrevCx, cy - pinchPrevCy)
+                                                    }
+                                                    pinchPrevCx = cx
+                                                    pinchPrevCy = cy
+                                                    pinchHasPrevCentroid = true
+                                                } else {
+                                                    pinchHasPrevCentroid = false
+                                                }
+                                            }
+                                            // Both fingers up: pinch done. End the
+                                            // gesture with no tap/hold/slide —
+                                            // slide is null, so the execution
+                                            // phase below is skipped, and the
+                                            // finally flush is a no-op (the END
+                                            // frame was already sent on entry).
+                                            if (first?.pressed != true && second?.pressed != true) break
+                                            continue
+                                        }
+
+                                        // ---- 2b. Zoom-pan: the video is zoomed in ----
+                                        //
+                                        // The single-finger recognizer path below is bypassed: a drag past
+                                        // the swipe threshold reports raw screen-px deltas as a pan, the
+                                        // hold was already disabled (see zoomPanMode), and a release without
+                                        // a pan falls through to the recognizer's onUp — which has only
+                                        // seen down + up, so it defers exactly like a tap.
+                                        if (zoomPanMode) {
+                                            val panChange = event.changes.lastOrNull { it.id == pointerId } ?: continue
+                                            if (!panChange.pressed) {
+                                                if (!panStarted) {
+                                                    when (val up = recognizer.onUp(System.currentTimeMillis())) {
+                                                        is PlayerGestureRecognizer.UpResult.TapDeferred ->
+                                                            pendingTapJob = scope.launch {
+                                                                delay(PlayerGestureRecognizer.DOUBLE_TAP_TIMEOUT_MS)
+                                                                currentOnTap()
+                                                            }
+                                                        is PlayerGestureRecognizer.UpResult.End ->
+                                                            up.frame?.let { currentHandler.handleGestureFrame(it) }
+                                                    }
+                                                }
+                                                break
+                                            }
+                                            panChange.consume()
+                                            val panDx = panChange.position.x - panLastX
+                                            val panDy = panChange.position.y - panLastY
+                                            panLastX = panChange.position.x
+                                            panLastY = panChange.position.y
+                                            panTotalX += panDx
+                                            panTotalY += panDy
+                                            if (!panStarted && hypot(panTotalX, panTotalY) > SWIPE_THRESHOLD) {
+                                                panStarted = true
+                                            }
+                                            if (panStarted) currentOnZoomPan(panDx, panDy)
+                                            continue
+                                        }
                                         val change = event.changes.lastOrNull { it.id == pointerId } ?: continue
                                         if (!change.pressed) {
                                             when (val up = recognizer.onUp(System.currentTimeMillis())) {
@@ -290,7 +453,6 @@ fun PlayerGestureSystem(
                                             is PlayerGestureRecognizer.MoveResult.Idle ->
                                                 move.frames.forEach { currentHandler.handleGestureFrame(it) }
                                             is PlayerGestureRecognizer.MoveResult.SlideStart -> {
-                                                move.frames.forEach { currentHandler.handleGestureFrame(it) }
                                                 slide = move
                                                 break
                                             }
@@ -341,7 +503,7 @@ fun PlayerGestureSystem(
                                         }
                                     }
                                 } finally {
-                                    holdWatchdog.cancel()
+                                    holdWatchdog?.cancel()
                                     recognizer.cancel(System.currentTimeMillis())
                                         ?.let { currentHandler.handleGestureFrame(it) }
                                 }
@@ -372,4 +534,15 @@ fun PlayerGestureSystem(
             )
         }
     }
+}
+
+/**
+ * Euclidean distance between two pressed pointers in px — the pinch's size
+ * measurement. The per-move scale handed to [PlayerGestureSystem.onPinchScale]
+ * is the ratio of successive distances (1.0 while the fingers hold still).
+ */
+private fun pointerDistance(a: PointerInputChange, b: PointerInputChange): Float {
+    val dx = a.position.x - b.position.x
+    val dy = a.position.y - b.position.y
+    return sqrt(dx * dx + dy * dy)
 }

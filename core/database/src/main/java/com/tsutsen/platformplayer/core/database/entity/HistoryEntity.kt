@@ -22,4 +22,6 @@ data class HistoryEntity(
     val viewedAt: Long = System.currentTimeMillis(),
     val authorUrl: String? = null,
     val viewCount: Long = 0,
+    /** The video's real posted date, captured at watch time (0 = unknown). */
+    val postedAt: Long = 0,
 )

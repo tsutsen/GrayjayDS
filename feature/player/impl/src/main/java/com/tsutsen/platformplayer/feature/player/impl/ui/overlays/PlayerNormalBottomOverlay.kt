@@ -44,12 +44,17 @@ internal fun PlayerNormalBottomOverlay(
     onScrubFinished: () -> Unit = {},
     isScrubbing: Boolean = false,
     scrubPositionMs: Long = 0L,
+    // Hold-seek scrub target while the player is paused mid-scrub; null = no
+    // preview. While set, it drives the playhead (the live position is
+    // frozen until the scrub commits).
+    seekPreviewMs: Long? = null,
     chapters: List<VideoChapter> = emptyList(),
 ) {
     // Collected here — at the leaf — so the 10 Hz position ticks recompose
     // only this overlay, not the whole player screen.
     val currentPositionMs by positionMs.collectAsState(initial = positionMs.value)
-    val effectivePositionMs = if (isScrubbing) scrubPositionMs else currentPositionMs
+    val effectivePositionMs =
+        seekPreviewMs ?: (if (isScrubbing) scrubPositionMs else currentPositionMs)
 
     Column(
         modifier =
@@ -143,9 +148,16 @@ internal fun PlayerNormalBottomOverlay(
         var isDragging by remember { mutableStateOf(false) }
         var seekPosition by remember { mutableFloatStateOf(0f) }
 
+        // Playhead position for the track: a local slider drag wins, then
+        // the effective (preview-aware) position drives the rest.
+        val playheadFraction =
+            if (isDragging) seekPosition
+            else if (durationMs > 0) effectivePositionMs.toFloat() / durationMs
+            else 0f
+
         Box {
             Slider(
-                value = if (isDragging) seekPosition else (if (durationMs > 0) currentPositionMs.toFloat() / durationMs else 0f),
+                value = playheadFraction,
                 onValueChange = {
                     isDragging = true
                     seekPosition = it
@@ -169,7 +181,7 @@ internal fun PlayerNormalBottomOverlay(
             // Chapter dots over the timeline (drawn after the slider so they
             // sit on the track), skipping the leading edge. Played part ->
             // secondary, unplayed part -> primary.
-            val progress = if (isDragging) seekPosition else (if (durationMs > 0) currentPositionMs.toFloat() / durationMs else 0f)
+            val progress = playheadFraction
             val playedDotColor = MaterialTheme.colorScheme.secondaryContainer
             val unplayedDotColor = MaterialTheme.colorScheme.primary
             if (chapters.isNotEmpty() && durationMs > 0) {

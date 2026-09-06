@@ -17,4 +17,10 @@ data class SavedVideoEntity(
     val durationMs: Long = 0,
     val viewCount: Long = 0,
     val addedAt: Long = System.currentTimeMillis(),
+    /**
+     * The video's real posted date, captured at save time (0 = unknown for
+     * pre-migration rows). Shown in the card's bottom-left pill; distinct
+     * from [addedAt] (when it was saved to this section).
+     */
+    val postedAt: Long = 0,
 )

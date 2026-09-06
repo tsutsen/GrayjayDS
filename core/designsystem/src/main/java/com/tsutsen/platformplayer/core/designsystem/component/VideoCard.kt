@@ -113,6 +113,7 @@ fun VideoCard(
     val viewCount = card.viewCount
     val durationMs = card.durationMs
     val publishedAt = card.publishedAt
+    val addedAt = card.addedAt
     val thumbnailUrl = card.thumbnailUrl
     val downloadProgress = card.downloadProgress
 
@@ -153,6 +154,17 @@ fun VideoCard(
                     LiveBadge(modifier = Modifier.align(Alignment.TopStart).padding(Tokens.SpaceSm))
                 } else if (card.isClip) {
                     ClipBadge(modifier = Modifier.align(Alignment.TopStart).padding(Tokens.SpaceSm))
+                } else if (addedAt != null) {
+                    // Library cards: when it was added to this section. Sits
+                    // top-left so it's distinct from the posted date, which
+                    // stays in the bottom-left pill.
+                    ThumbnailPill(
+                        text = RelativeTime.format(addedAt),
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopStart)
+                                .padding(Tokens.SpaceSm),
+                    )
                 }
 
                 // View-count pill (top-right).

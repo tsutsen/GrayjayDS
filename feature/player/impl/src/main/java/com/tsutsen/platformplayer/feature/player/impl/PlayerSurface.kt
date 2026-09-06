@@ -2,6 +2,7 @@ package com.tsutsen.platformplayer.feature.player.impl
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.spring
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -109,15 +110,6 @@ class PlayerSurface(private val scope: CoroutineScope) {
     val isDraggingMiniPlayer = mutableStateOf(false)
 
     /**
-     * Set by the morph drag-END callback (minimize path only). The sync
-     * effect consumes it to wait a short grace window before settling:
-     * the committed flip lands a few frames after the callback (async VM
-     * call), and settling to the opposite target in the meantime would dip
-     * and reverse.
-     */
-    var morphDragJustEnded = false
-
-    /**
      * True while a fullscreen-axis settle animation is in flight. Settle
      * animations are launched in the composition scope (never the sync
      * effect's body, whose restarts would cancel them); this flag guards
@@ -128,6 +120,8 @@ class PlayerSurface(private val scope: CoroutineScope) {
      * recommendations, live chat) and must not compose mid-motion.
      */
     val isSettlingFullscreen = mutableStateOf(false)
+    /** Same contract as [isSettlingFullscreen], for the morph axis. */
+    val isSettlingMorph = mutableStateOf(false)
     val miniPlayerOffsetX = mutableStateOf(0f)
     val miniPlayerOffsetY = mutableStateOf(0f)
 
@@ -169,6 +163,32 @@ class PlayerSurface(private val scope: CoroutineScope) {
 
     /** Drag travel distance that maps to the full 0..1 morph progress. */
     fun dragTravelPx(): Float = containerSize.value.height * 0.45f
+
+    /**
+     * Critically damped settle for the morph / fullscreen axes. Always
+     * combined with a release velocity passed to [Animatable.animateTo]
+     * ([initialVelocity]) — starting from the finger's velocity keeps a
+     * drag-end settle continuous with the drag; the old 300ms
+     * ease-from-still tween read as "decelerate, pause, accelerate again"
+     * mid-release.
+     */
+    val MORPH_SETTLE_SPRING: SpringSpec<Float> =
+        spring(
+            stiffness = Spring.StiffnessMediumLow,
+            dampingRatio = Spring.DampingRatioNoBouncy,
+        )
+
+    /**
+     * Stiffer settle for the overdrag-to-fullscreen gesture's return. The
+     * general [MORPH_SETTLE_SPRING] (StiffnessMediumLow) reads as a slow,
+     * floaty drift home after an overdrag flick; this one snaps the panel
+     * back in a crisp motion that matches the flick's energy.
+     */
+    val OVERDRAG_SETTLE_SPRING: SpringSpec<Float> =
+        spring(
+            stiffness = Spring.StiffnessMedium,
+            dampingRatio = Spring.DampingRatioNoBouncy,
+        )
 
     // ==================== Mini-player geometry ====================
 
@@ -256,6 +276,19 @@ class PlayerSurface(private val scope: CoroutineScope) {
      */
     fun effectiveFullscreenNow(): Float =
         fullscreenProgress.value * (1f - shrinkProgress.value)
+
+    /**
+     * True while any axis that drives [detailsAlphaNow] (the morph and
+     * fullscreen axes, the latter via shrink) is dragging or settling.
+     * Lets the UI keep the heavy details panel composed/unmounted only on
+     * still frames — never mid-motion.
+     */
+    fun isAnyAxisMoving(): Boolean =
+        isDraggingMorph.value ||
+            isDraggingFullscreen.value ||
+            isDraggingShrink.value ||
+            isSettlingMorph.value ||
+            isSettlingFullscreen.value
 
     /** Current video rect (position + size + corner) for the given orientation. */
     fun videoLayout(isLandscape: Boolean, density: Density): VideoLayout {

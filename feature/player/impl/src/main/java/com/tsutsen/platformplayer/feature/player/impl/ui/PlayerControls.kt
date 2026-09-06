@@ -63,7 +63,6 @@ fun PlayerControls(
     surface: PlayerSurface,
     isLandscape: Boolean,
     controlsVisible: Boolean,
-    isLoading: Boolean,
     activeProgressIndicator: com.tsutsen.platformplayer.feature.player.impl.gesture.GestureIndicator.Progress?,
     badgeState: GestureBadgeState,
     onBadgeSessionEnded: () -> Unit = {},
@@ -72,6 +71,7 @@ fun PlayerControls(
     subtitlesOn: Boolean,
     isScrubbing: Boolean,
     scrubPositionMs: Long,
+    seekPreviewMs: Long? = null,
     onSubtitleToggle: () -> Unit,
 
     onPlayPause: () -> Unit,
@@ -228,7 +228,6 @@ fun PlayerControls(
                 ) {
                     PlayerUIScaffold(
                         modifier = videoBoxModifier,
-                        isLoading = isLoading,
                         showTopBar = resolvedShowTopBar,
                         showBottomBar = resolvedShowBottomBar,
                         gradientsVisible = gradientsVisible,
@@ -307,6 +306,7 @@ fun PlayerControls(
                                                 onScrubFinished = onScrubFinished,
                                                 isScrubbing = isScrubbing,
                                                 scrubPositionMs = scrubPositionMs,
+                                                seekPreviewMs = seekPreviewMs,
                                                 subtitlesOn = subtitlesOn,
                                                 onSubtitleToggle = onSubtitleToggle,
                                                 chapters = state.chapters,
@@ -350,6 +350,7 @@ fun PlayerControls(
                                                     onScrubFinished = onScrubFinished,
                                                     isScrubbing = isScrubbing,
                                                     scrubPositionMs = scrubPositionMs,
+                                                    seekPreviewMs = seekPreviewMs,
                                                     subtitlesOn = subtitlesOn,
                                                     onSubtitleToggle = onSubtitleToggle,
                                                     chapters = state.chapters,

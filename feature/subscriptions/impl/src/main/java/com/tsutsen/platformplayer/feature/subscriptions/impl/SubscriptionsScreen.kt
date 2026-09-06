@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -36,6 +37,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -137,7 +139,9 @@ fun SubscriptionsScreen(
                         onRefresh = viewModel::refresh,
                         onLoadMore = viewModel::loadMore,
                         onVideoLongClick = { optionsCard = it },
-                        onItemClicked = { url -> playerViewModel.play(url) },
+                        // Pass the card (not just the URL) so the player's
+                        // details are prefilled instantly, like the home feed.
+                        onItemClicked = { card -> playerViewModel.play(card) },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -181,6 +185,7 @@ fun SubscriptionsScreen(
 /**
  * Main subscriptions content area.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SubscriptionsContent(
     state: SubscriptionsUiState.Success,
@@ -195,7 +200,7 @@ private fun SubscriptionsContent(
     onStreamsToggle: () -> Unit,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
-    onItemClicked: (String) -> Unit,
+    onItemClicked: (ModelVideoCard) -> Unit,
     onVideoLongClick: (ModelVideoCard) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -298,14 +303,14 @@ private fun SubscriptionsContent(
                                 layout = ContainerLayout.Grid(gridColumns),
                                 isLoading = false,
                                 hasMorePages = state.hasMorePages,
-                                onCardClick = { card -> onItemClicked((card as ModelVideoCard).url) },
+                                onCardClick = { card -> onItemClicked(card as ModelVideoCard) },
                                 onLoadMore = onLoadMore,
                                 modifier = Modifier.fillMaxWidth(),
                                 contentPadding = PaddingValues(ContentCardInnerGap()),
                             ) { card ->
                                 VideoCard(
                                     card = card as ModelVideoCard,
-                                    onClick = { onItemClicked((card as ModelVideoCard).url) },
+                                    onClick = { onItemClicked(card as ModelVideoCard) },
                                     onLongClick = { onVideoLongClick(card as ModelVideoCard) },
                                     modifier = Modifier.fillMaxWidth(),
                                     watchProgress = watchStates[card.url]?.takeIf { !it.isWatched }?.progress,
@@ -398,6 +403,13 @@ private fun SubscriptionsContent(
                     isRefreshing = state.isRefreshing || (state.isLoading && state.items.isEmpty()),
                     state = pullToRefreshState,
                     onRefresh = onRefresh,
+                    indicator = {
+                        PullToRefreshDefaults.LoadingIndicator(
+                            state = pullToRefreshState,
+                            isRefreshing = state.isRefreshing || (state.isLoading && state.items.isEmpty()),
+                            modifier = Modifier.align(Alignment.TopCenter),
+                        )
+                    },
                     content = {
                         ContentCard(modifier = Modifier.fillMaxSize()) {
                             VideoContainer(
@@ -405,14 +417,14 @@ private fun SubscriptionsContent(
                             layout = ContainerLayout.List,
                             isLoading = false,
                             hasMorePages = state.hasMorePages,
-                            onCardClick = { card -> onItemClicked((card as ModelVideoCard).url) },
+                            onCardClick = { card -> onItemClicked(card as ModelVideoCard) },
                             onLoadMore = onLoadMore,
                             modifier = Modifier.fillMaxWidth(),
                             contentPadding = PaddingValues(ContentCardInnerGap()),
                         ) { card ->
                             VideoCard(
                                 card = card as ModelVideoCard,
-                                onClick = { onItemClicked((card as ModelVideoCard).url) },
+                                onClick = { onItemClicked(card as ModelVideoCard) },
                                 onLongClick = { onVideoLongClick(card as ModelVideoCard) },
                                 modifier = Modifier.fillMaxWidth(),
                                 watchProgress = watchStates[card.url]?.takeIf { !it.isWatched }?.progress,

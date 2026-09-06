@@ -216,6 +216,7 @@ internal fun GestureIndicatorOverlay(
                         text = s.label,
                         color = Color.White,
                         style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }

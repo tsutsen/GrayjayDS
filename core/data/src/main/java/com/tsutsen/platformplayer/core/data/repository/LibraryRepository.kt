@@ -69,6 +69,9 @@ interface LibraryRepository {
         url: String,
     )
 
+    /** Removes a video from watch history (the "History" section). */
+    suspend fun deleteFromHistory(url: String)
+
     suspend fun createPlaylist(
         name: String,
         description: String? = null,

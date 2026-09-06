@@ -6,6 +6,7 @@ import com.tsutsen.platformplayer.core.designsystem.theme.Tokens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,27 +23,39 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.ShortText
 import androidx.compose.material.icons.filled.VideoCall
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.SmartDisplay
+import androidx.compose.material.icons.outlined.WebStories
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
+import androidx.compose.material3.ToggleButtonShapes
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,6 +75,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -90,7 +106,7 @@ import com.tsutsen.platformplayer.core.model.VideoCard as CoreVideoCard
  * Channel detail screen: hero header, Videos / Playlists / About tabs.
  * Portrait: top TabRow. Wide: 80 dp vertical icon rail on the right.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ChannelScreen(
     channelUrl: String,
@@ -104,6 +120,7 @@ fun ChannelScreen(
     val isWide = rememberIsWide()
     var selectedTab by remember { mutableIntStateOf(TAB_VIDEOS) }
     var optionsCard by remember { mutableStateOf<CoreVideoCard?>(null) }
+    val refreshState = rememberPullToRefreshState()
 
     LaunchedEffect(channelUrl) {
         viewModel.load(channelUrl)
@@ -216,8 +233,16 @@ fun ChannelScreen(
                                 )
                             }
                         }
-                        Button(onClick = { viewModel.toggleSubscription() }) {
-                            Text(if (state.isSubscribed) "Subscribed" else "Subscribe")
+                        // Expressive + state-driven: filled to subscribe,
+                        // tonal once subscribed.
+                        if (state.isSubscribed) {
+                            FilledTonalButton(onClick = { viewModel.toggleSubscription() }) {
+                                Text("Subscribed")
+                            }
+                        } else {
+                            Button(onClick = { viewModel.toggleSubscription() }) {
+                                Text("Subscribe")
+                            }
                         }
                     }
                 },
@@ -253,10 +278,10 @@ fun ChannelScreen(
                 // is present (Videos=0, Shorts=1?, Playlists, About).
                 val tabs =
                     buildList {
-                        add(ChannelTab("Videos", Icons.Filled.VideoCall))
-                        if (state.hasShorts) add(ChannelTab("Shorts", Icons.Filled.ShortText))
+                        add(ChannelTab("Videos", Icons.Outlined.SmartDisplay))
+                        if (state.hasShorts) add(ChannelTab("Shorts", Icons.Outlined.WebStories))
                         add(ChannelTab("Playlists", Icons.Filled.PlaylistPlay))
-                        add(ChannelTab("About", Icons.Filled.Description))
+                        add(ChannelTab("About", Icons.Outlined.Info))
                     }
                 val tabPlaylists = tabs.indexOfFirst { it.label == "Playlists" }
                 val tabShorts = tabs.indexOfFirst { it.label == "Shorts" }
@@ -270,9 +295,16 @@ fun ChannelScreen(
                         PullToRefreshBox(
                             // Reuse the pull-to-refresh spinner as the loading indicator.
                             isRefreshing = state.isRefreshing,
-                            state = rememberPullToRefreshState(),
+                            state = refreshState,
                             onRefresh = { viewModel.refresh() },
                             modifier = Modifier.fillMaxSize(),
+                            indicator = {
+                                PullToRefreshDefaults.LoadingIndicator(
+                                    state = refreshState,
+                                    isRefreshing = state.isRefreshing,
+                                    modifier = Modifier.align(Alignment.TopCenter),
+                                )
+                            },
                             content = {
                                 Column(modifier = Modifier.fillMaxSize()) {
                                     if (isWide) {
@@ -286,6 +318,7 @@ fun ChannelScreen(
                                             onLoadMore = { viewModel.loadNextPage() },
                                             onShortsLoadMore = { viewModel.loadShortsNextPage() },
                                             onRetryContent = { viewModel.loadInitialContents() },
+                                            onPlaylistsRetry = { viewModel.loadPlaylists(force = true) },
                                             onVideoLongClick = { optionsCard = it },
                                         )
                                     } else {
@@ -314,6 +347,7 @@ fun ChannelScreen(
                                             onLoadMore = { viewModel.loadNextPage() },
                                             onShortsLoadMore = { viewModel.loadShortsNextPage() },
                                             onRetryContent = { viewModel.loadInitialContents() },
+                                            onPlaylistsRetry = { viewModel.loadPlaylists(force = true) },
                                             onVideoLongClick = { optionsCard = it },
                                         )
                                     }
@@ -367,6 +401,7 @@ private fun ChannelContent(
     onLoadMore: () -> Unit,
     onShortsLoadMore: () -> Unit,
     onRetryContent: () -> Unit,
+    onPlaylistsRetry: () -> Unit,
     onVideoLongClick: (CoreVideoCard) -> Unit,
 ) {
     val watchStates by hiltViewModel<PlayerViewModel>().watchStates.collectAsState()
@@ -376,35 +411,38 @@ private fun ChannelContent(
     val tabAbout = tabPlaylists + 1
     when (selectedTab) {
         tabAbout -> {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(Tokens.SpaceLg),
-            ) {
-                state.channel.description?.let { description ->
-                    Text(
-                        text = description,
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Spacer(Modifier.height(Tokens.SpaceLg))
-                }
-                state.channel.links.forEach { (label, link) ->
-                    Text(
-                        text = "$label: $link",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    // ponytail: display-only links; no in-app browser seam
-                                },
-                    )
-                    Spacer(Modifier.height(Tokens.SpaceSm))
+            // Same card treatment as the other tabs — consistency.
+            ContentCard(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(Tokens.SpaceLg),
+                ) {
+                    state.channel.description?.let { description ->
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Spacer(Modifier.height(Tokens.SpaceLg))
+                    }
+                    state.channel.links.forEach { (label, link) ->
+                        Text(
+                            text = "$label: $link",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        // ponytail: display-only links; no in-app browser seam
+                                    },
+                        )
+                        Spacer(Modifier.height(Tokens.SpaceSm))
+                    }
                 }
             }
         }
@@ -425,7 +463,10 @@ private fun ChannelContent(
                         onRetry = { onShortsLoadMore() },
                     )
                 } else {
-                    Box(modifier = Modifier.fillMaxSize())
+                    // Empty state: a placeholder in the real shorts card's shape.
+                    ChannelEmptyState {
+                        ShortsEmptyCard(message = "No shorts")
+                    }
                 }
             } else if (isWide) {
                 ContentCard(modifier = Modifier.fillMaxSize()) {
@@ -467,15 +508,33 @@ private fun ChannelContent(
 
         tabPlaylists -> {
             if (state.playlists.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "No playlists",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                val playlistsError = state.playlistsError
+                if (state.playlistsLoading) {
+                    // Playlists load lazily on first tab selection — spinner
+                    // while the load is in flight, so the placeholder below
+                    // only appears for a genuinely empty channel.
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                } else if (playlistsError != null) {
+                    ErrorState(
+                        message = playlistsError,
+                        onRetry = { onPlaylistsRetry() },
                     )
+                } else {
+                    // Empty state: a placeholder card in the real playlist
+                    // card's shape, on the same panel real content would sit
+                    // on.
+                    ChannelEmptyState {
+                        ChannelEmptyCard(
+                            icon = Icons.Filled.PlaylistPlay,
+                            message = "No playlists",
+                            coverRatio = 16f / 9f,
+                        )
+                    }
                 }
             } else {
                 ContentCard(modifier = Modifier.fillMaxSize()) {
@@ -518,7 +577,15 @@ private fun ChannelContent(
                         onRetry = { onRetryContent() },
                     )
                 } else {
-                    Box(modifier = Modifier.fillMaxSize())
+                    // Empty state: a placeholder card in the real video card's
+                    // shape, on the same panel real content would sit on.
+                    ChannelEmptyState {
+                        ChannelEmptyCard(
+                            icon = Icons.Filled.VideoCall,
+                            message = "No videos",
+                            coverRatio = 16f / 9f,
+                        )
+                    }
                 }
             } else if (isWide) {
                 ContentCard(modifier = Modifier.fillMaxSize()) {
@@ -555,6 +622,124 @@ private fun ChannelContent(
                 }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Panel wrapper for a channel tab's empty state: the same [ContentCard] +
+ * inset a loaded tab uses, so a placeholder card sits where the first real
+ * card would.
+ */
+@Composable
+private fun ChannelEmptyState(
+    content: @Composable () -> Unit,
+) {
+    ContentCard(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().padding(ContentCardInnerGap())) {
+            content()
+        }
+    }
+}
+
+/**
+ * Empty-state placeholder card mirroring the real card shape: an
+ * aspect-ratio cover with a centered icon, one text line below. No fixed
+ * heights — width + aspect ratio + reserved text line size the card, so it
+ * lines up like the real cards (the library "All" card technique).
+ */
+@Composable
+private fun ChannelEmptyCard(
+    icon: ImageVector,
+    message: String,
+    coverRatio: Float,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(BluejayTokens().radius.sm),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+            ),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(coverRatio)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(32.dp),
+                )
+            }
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().padding(Tokens.SpaceMd),
+            )
+        }
+    }
+}
+
+/**
+ * Empty-state placeholder mirroring [VideoCardShorts]: a fixed-height 9:16
+ * cover on the left and the message in the text column to its right — the
+ * same skeleton as a real shorts card.
+ */
+@Composable
+private fun ShortsEmptyCard(
+    message: String,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(BluejayTokens().radius.sm),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+            ),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(Tokens.SpaceSm)) {
+            Box(
+                modifier =
+                    Modifier
+                        .height(120.dp)
+                        .aspectRatio(9f / 16f)
+                        .clip(RoundedCornerShape(BluejayTokens().radius.sm))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ShortText,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .padding(start = Tokens.SpaceMd)
+                        .align(Alignment.CenterVertically),
+            )
         }
     }
 }
@@ -671,35 +856,80 @@ private fun WideVideoCell(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ChannelIconRail(
     tabs: List<ChannelTab>,
     selectedTab: Int,
     onSelect: (Int) -> Unit,
 ) {
+    // Sidebar rail: the buttons form a vertical button group
+    // (VerticalButtonGroupSample shape language) at their natural height —
+    // the group occupies only what it needs, top-aligned. Unlike the sample's
+    // connected -6dp overlap, the buttons are spaced Tokens.SpaceXs apart so
+    // they never overlap. No rail background: the page background shows
+    // through.
     Column(
         modifier =
             Modifier
                 .width(80.dp)
                 .fillMaxSize()
-                .padding(vertical = Tokens.SpaceMd),
+                .padding(horizontal = 6.dp, vertical = Tokens.SpaceMd),
+        verticalArrangement = Arrangement.spacedBy(Tokens.SpaceXs),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         tabs.forEachIndexed { index, tab ->
-            IconButton(
-                onClick = { onSelect(index) },
-                modifier = Modifier.padding(vertical = 8.dp),
+            val shape =
+                when (index) {
+                    0 ->
+                        (ButtonGroupDefaults.connectedMiddleButtonShapes().shape
+                                as RoundedCornerShape)
+                            .copy(topStart = CornerSize(100), topEnd = CornerSize(100))
+                    tabs.lastIndex ->
+                        (ButtonGroupDefaults.connectedMiddleButtonShapes().shape
+                                as RoundedCornerShape)
+                            .copy(bottomStart = CornerSize(100), bottomEnd = CornerSize(100))
+                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes().shape
+                }
+            ToggleButton(
+                checked = selectedTab == index,
+                onCheckedChange = { onSelect(index) },
+                shapes =
+                    ToggleButtonShapes(
+                        shape = shape,
+                        pressedShape = ToggleButtonDefaults.pressedShape,
+                        checkedShape = ButtonGroupDefaults.connectedButtonCheckedShape,
+                    ),
+                // The default small-button padding (16 dp each side) leaves
+                // only 32 dp for the label on a 64 dp button and clips
+                // "Shorts"/"Playlists". Tighten the horizontal padding to
+                // Tokens.SpaceXs (48 dp of label width); keep the 10 dp
+                // vertical so the button height is unchanged.
+                contentPadding =
+                    PaddingValues(horizontal = Tokens.SpaceXs, vertical = 10.dp),
+                // Natural height (no weight): the group occupies only the
+                // vertical space it needs instead of stretching to fill.
+                modifier =
+                    Modifier
+                        .width(64.dp)
+                        .semantics { role = Role.RadioButton },
             ) {
-                Icon(
-                    imageVector = tab.icon,
-                    contentDescription = tab.label,
-                    tint =
-                        if (index == selectedTab) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                )
+                Column(
+                    modifier = Modifier.padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        imageVector = tab.icon,
+                        contentDescription = tab.label,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.height(Tokens.SpaceXxs))
+                    Text(
+                        text = tab.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
